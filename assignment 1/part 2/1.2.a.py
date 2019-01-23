@@ -1,22 +1,37 @@
 """
 GridWorld
 """
+import copy
 import itertools
 from collections import defaultdict
 import numpy as np
 
 
 class GridWorld:
+    """
+    A smart grid world class which knows what actions to taken, where he can end up.
+    It can also for an agent friend find the optimal policy for him to behave in the
+    world. I know it's a bit messed up know. It shold be the job of the agent to find
+    the optimal way to behave in this environment and not the environment to let the
+    agent know about that policy. Will fix it!
+    """
+
     def __init__(self, size, action_prob, gamma, delta):
+        self.size = size
         self.gamma = gamma
         self.action_prob = action_prob
-        self.size = size
         self.delta = delta
-
-        self.state_value = np.zeros((size, size))
+        # Initialize the V_0(S) = 0, for all S
+        self.state_value = np.zeros(size ** 2)
+        # Initialize state rewards
         self.rewards = np.zeros((size, size))
+        # Set the rewards in the top left and right corners
+        self.rewards[0][0] = 1
+        self.rewards[0][size-1] = 10
+        self.rewards = self.rewards.reshape((-1, ))
+        # Define the policy and utility arrays to get convert
+        # state -> idx and reverse
         self.policy = defaultdict(list)
-
         self.mapping = np.arange(size ** 2).reshape(size, size)
         self.state_to_idx = defaultdict(int)
         self.idx_to_state = defaultdict(tuple)
@@ -25,30 +40,27 @@ class GridWorld:
             for j in range(size):
                 self.state_to_idx[(i, j)] = count
                 self.idx_to_state[count] = (i, j)
-                self.rewards[i][j] = 0
                 count += 1
-
-        # self.actions = ['L', 'R', 'U', 'D']
+        # Actions and corresponding transitions = ['L', 'R', 'U', 'D']
         self.num_actions = 4
         self.move = [np.array([0, -1]),
                      np.array([0, 1]),
                      np.array([-1, 0]),
                      np.array([1, 0])]
-        # Set the rewards in the top left and right corners
-        self.rewards[0][0] = 1
-        self.rewards[0][size-1] = 10
-        self.rewards = self.rewards.reshape((-1, ))
-        # P(S' | S, a)
+        # Initialize P(S' | S, a). We only need to call this once as it is
+        # the dynamics of the environment and need not be evaluated multiple
+        # times during the policy, value and modified policy iteration.
         self.prob_san = np.zeros(
             (self.size ** 2, self.num_actions, self.size ** 2))
+        self._generate_next_state_probs()
         # P_pi(S' | S)
-        self.prob_sn = np.zeros((self.size ** 2, self.size ** 2))
+        self.prob_sn_pi = np.zeros((self.size ** 2, self.size ** 2))
         # r_pi(S)
-        self.rewards_pi = np.zeros((size**2, 1))
+        self.rewards_pi = np.zeros(size**2)
 
     # Make a valid transition to the next state
     def _generate_valid_move(self, current_state, action, step):
-        """        
+        """
         Input:
         State: tuple
         (i, j)
@@ -93,7 +105,7 @@ class GridWorld:
                         self.prob_san[s_idx][a_idx][ns_idx] += self.action_prob
                     else:
                         self.prob_san[s_idx][a_idx][ns_idx] += (
-                            1-self.action_prob)/3
+                            1-self.action_prob)/(len(self.move)-1)
 
     def _generate_transition_pi(self):
         print("Generating transition P_pi(S' | S)")
@@ -106,7 +118,7 @@ class GridWorld:
             # print(action_probs)
             for a_idx, a_val in enumerate(action_probs):
                 temp_prob_sn += np.array(a_val * self.prob_san[s_idx][a_idx])
-            self.prob_sn[s_idx] = temp_prob_sn
+            self.prob_sn_pi[s_idx] = temp_prob_sn
 
     def _generate_reward_pi(self):
         print("Generating r_pi(S)")
@@ -127,29 +139,34 @@ class GridWorld:
                 self.policy[(row, col)] = np.eye(
                     1, self.num_actions, k=np.random.choice(self.num_actions)).squeeze()
 
-    def _do_policy_evaluation(self):
-        #counter = itertools.count()
-        self.state_value = np.reshape(self.state_value, (-1, 1))
+    def _do_policy_evaluation(self, value_iter):
+        counter = itertools.count()
+        self.state_value = np.zeros(self.state_value.shape)
         while True:
-            # print(next(counter))
             updated_state_value = self.rewards_pi + self.gamma * \
-                np.matmul(self.prob_sn, self.state_value)
+                np.matmul(self.prob_sn_pi, self.state_value)
+            # print(updated_state_value)
             if all(i < self.delta for i in np.abs(updated_state_value - self.state_value)):
                 break
-            self.state_value = updated_state_value
 
-    def do_policy_iteration(self):
+            next(counter)
+            self.state_value = updated_state_value
+            if counter == value_iter:
+                break
+
+    def do_policy_iteration(self, value_iter=-1):
+        """
+        Policy iteration
+        """
         # Start with a deterministic random policy
         self._generate_random_policy()
-        # P(S' | S, a)
-        self._generate_next_state_probs()
         while True:
             # P_pi(S' | S)
             self._generate_transition_pi()
             # r_pi(S)
             self._generate_reward_pi()
-            # Calculate
-            self._do_policy_evaluation()
+            # Calculate value function
+            self._do_policy_evaluation(value_iter=5)
             # Flag to check if the policy is stable or not
             is_stable = True
             for state, action_probs in self.policy.items():
@@ -174,12 +191,34 @@ class GridWorld:
             if is_stable:
                 break
 
-    def get_state_value(self):
-        return self.state_value.reshape((self.size, self.size))
+        return self.state_value.reshape((self.size, self.size)), self.policy
+
+    def do_value_iteration(self):
+        """
+        Do value iteration
+        """
+        while True:
+            old_state_value = copy.deepcopy(self.state_value)
+            # Sweep through state-space and update state-value using Bellman optimality
+            # equation
+            for s_idx, s_val in enumerate(self.state_value):
+                q_values = []
+                for a_idx, a_step in enumerate(self.move):
+                    q_values.append(np.dot(self.prob_san[s_idx][a_idx],
+                                           self.rewards + self.gamma * self.state_value))
+                q_max_idx = np.argmax(q_values)
+                self.state_value[s_idx] = q_values[q_max_idx]
+                self.policy[tuple(np.argwhere(self.mapping == s_idx)[0])] = np.eye(
+                    self.num_actions)[q_max_idx]
+
+            if all(i < self.delta for i in np.abs(old_state_value - self.state_value)):
+                break
+
+        return self.state_value.reshape((self.size, self.size)), self.policy
 
 
 # Parameters
-WORLD_SIZES = [3]
+WORLD_SIZES = [5]
 ACTION_PROBS = [0.9]
 GAMMAS = [0.9]
 
@@ -189,6 +228,9 @@ for SIZE in WORLD_SIZES:
             # Create grid
             grid = GridWorld(size=SIZE, action_prob=ACTION_PROB,
                              gamma=GAMMA, delta=1e-3)
-            grid.do_policy_iteration()
-            state_value = grid.get_state_value()
+            # state_value, policy = grid.do_policy_iteration()
+            # state_value, policy = grid.do_value_iteration()
+            state_value, policy = grid.do_policy_iteration(value_iter=5)
+
             print(state_value)
+            print(policy)
