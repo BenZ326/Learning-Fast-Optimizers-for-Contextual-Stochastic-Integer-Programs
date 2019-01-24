@@ -94,7 +94,7 @@ class UCBBandit:
         """
         get accumulated Pr{I_t=i} over trials
         """
-        for t in range(0,int(self.total_steps)):
+        for t in range(0,self.total_steps):
             left_index=max(0,t-self.arms+1)
             right_index=t
             for arm in range(self.arms):
@@ -117,15 +117,56 @@ class UCBBandit:
 
 class AEBandit(UCBBandit):
     def __init__(self, arms, delta, eps,total_steps,r_k):
-        UCBBandit.__init__(self,arms,delta,eps,total_steps)
-        self.r_k=r_k
-        Omega={}
+        self.q_true = list(reversed(np.linspace(0, 1, arms)))
+        self.arms = arms
+        self.eps = eps
+        self.delta = delta
+        self.est_dstr = []
+        self.total_steps=total_steps
+        for i in range(arms):
+            self.est_dstr.append([])
+        self.r_k = r_k
+
+    def initialize(self):
+        """
+        Initializes the UCBBandit with default values before each trial
+        """
+        self.q_est = np.zeros(self.arms)
+        self.N = np.zeros(self.arms)
+        self.history = []
+        self.time = 0
+        self.Omega = set()
         for arm in range(self.arms):
-            Omega.add(str(arm))
+            self.Omega.add(str(arm))
 
-    def select_arm(self):
+    def reference_arm(self):
+        return np.argmax(self.q_est)
 
+    def _calculate_c(self,arm):
+        exp_1 = 1 + self.eps ** 0.5
+        exp_2 = 1+self.eps
+        exp_3 = (1 + self.eps) * self.N[arm]
+        exp = exp_1 * \
+        np.sqrt((exp_2 * np.log((np.log(exp_3+1)) / self.delta )) / ( self.N[arm]))
+        return 2*exp
 
+    def update_omega(self,reference_arm):
+        removed_arms=set()
+        for arm in self.Omega:
+            C_a=self._calculate_c(reference_arm)
+            C_i=self._calculate_c(int(arm))
+            if self.q_est[reference_arm]-C_a >= self.q_est[int(arm)]+C_i:
+                removed_arms.add(arm)
+        self.Omega = self.Omega-removed_arms
+
+    def learning(self):
+        #while len(self.Omega)>1:
+        for i in range(self.total_steps):
+            for arm in self.Omega:
+                self.play_arm(int(arm))
+            reference_arm = self.reference_arm()
+            self.update_omega(reference_arm)
+        return
 
 
 
@@ -139,26 +180,36 @@ def main():
     parser.add_argument('--delta', type=float, default=0.1)
     parser.add_argument('--epsilon', type=float, default=0.01)
     parser.add_argument('--trials', type=int, default=5000)
-    parser.add_argument('--steps', type=int, default=100)
+    parser.add_argument('--steps', type=int, default=7000)
+    parser.add_argument('--r_k', type=int, default=1)
     args = parser.parse_args()
 
-    bandit = UCBBandit(arms=6, delta=args.delta, eps=args.epsilon,total_steps=args.steps)
+    #bandit = UCBBandit(arms=6, delta=args.delta, eps=args.epsilon,total_steps=args.steps)
+    bandit_AE = AEBandit(arms=6, delta=args.delta, eps=args.epsilon,total_steps=args.steps,r_k=args.r_k)
     for trial in range(args.trials):
-        bandit.initialize()
-        for step in range(args.steps):
-            arm, done = bandit.select_arm()
-            if not done:
-                bandit.play_arm(arm)
-            else:
-                print("The best arm is {}".format(arm))
-                break
-        bandit.get_estimate_probability()
-    bandit.average_est_dstr(args.trials)
-    return bandit
+        #bandit.initialize()
+        bandit_AE.initialize()
+        bandit_AE.learning()
+        #for step in range(args.steps):
+            #arm, done = bandit.select_arm()
+            #if not done:
+            #    bandit.play_arm(arm)
+            #else:
+            #   print("The best arm is {}".format(arm))
+            #    break
+        #bandit.get_estimate_probability()
+        bandit_AE.get_estimate_probability()
+    bandit_AE.average_est_dstr(args.trials)
+    return bandit_AE
 
 
 b=main()
-plt.plot(range(len(b.est_dstr[0])),b.est_dstr[0],'*')
+plt.plot(range(len(b.est_dstr[0])),b.est_dstr[0],'.',color='b')
+plt.plot(range(len(b.est_dstr[1])),b.est_dstr[1],'.', color='g')
+plt.plot(range(len(b.est_dstr[2])),b.est_dstr[2],'.',color='r')
+plt.plot(range(len(b.est_dstr[3])),b.est_dstr[3],'.',color='c')
+plt.plot(range(len(b.est_dstr[4])),b.est_dstr[4],'.',color='y')
+plt.plot(range(len(b.est_dstr[5])),b.est_dstr[5],'.',color='k')
 plt.show()
 print(b.history)
 #if __name__ == '__main__':
