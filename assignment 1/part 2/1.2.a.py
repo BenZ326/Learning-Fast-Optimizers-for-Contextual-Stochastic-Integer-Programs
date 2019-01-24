@@ -149,9 +149,8 @@ class GridWorld:
             if all(i < self.delta for i in np.abs(updated_state_value - self.state_value)):
                 break
 
-            next(counter)
-            self.state_value = updated_state_value
-            if counter == value_iter:
+            self.state_value = copy.deepcopy(updated_state_value)
+            if next(counter) == value_iter:
                 break
 
     def do_policy_iteration(self, value_iter=-1):
@@ -166,7 +165,7 @@ class GridWorld:
             # r_pi(S)
             self._generate_reward_pi()
             # Calculate value function
-            self._do_policy_evaluation(value_iter=5)
+            self._do_policy_evaluation(value_iter)
             # Flag to check if the policy is stable or not
             is_stable = True
             for state, action_probs in self.policy.items():
@@ -228,9 +227,9 @@ for SIZE in WORLD_SIZES:
             # Create grid
             grid = GridWorld(size=SIZE, action_prob=ACTION_PROB,
                              gamma=GAMMA, delta=1e-3)
-            # state_value, policy = grid.do_policy_iteration()
+            state_value, policy = grid.do_policy_iteration()
             # state_value, policy = grid.do_value_iteration()
-            state_value, policy = grid.do_policy_iteration(value_iter=5)
+            # state_value, policy = grid.do_policy_iteration(value_iter=5)
 
             print(state_value)
             print(policy)
