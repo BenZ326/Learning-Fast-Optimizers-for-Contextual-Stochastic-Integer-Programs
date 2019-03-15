@@ -13,36 +13,66 @@ Configurations of the instances are as follows.
 variation of a normal distribution, as well as the number of items |N|. Basically it can be written as:
 w = C/(h*|N|) + e and e follows N(0,$\delta$^2);
 """
+"""
+The class has the following attributes:
+1. self._N the number of items
+2. self._C: the knapsack capacity
+3. self._Penalty: the unit penalty of removing an item
+4. self._delta: variance of the gaussian distribution followed by weights
+5. self._H: the percentage of items to be packed in expect
+6. self._V: the values of items
+"""
+class Instance_KS:
+    def __init__(self, n=30, support_c=np.array([100,200,300]),
+                 support_h = np.array([0.2, 0.4, 0.6]),
+                 lb_p = 3, ub_p = 8, delta_ratio = 0.01,
+                 m_v_min = 10, m_v_max = 40, var_v = 4):
+        self._N = n
+        self._Penalty = rd.randint(lb_p,ub_p)
+        idx_c = rd.randint(0, len(support_c) - 1)
+        idx_h = rd.randint(0, len(support_h) - 1)
+        self._C = support_c[idx_c]
+        self._H = support_h[idx_h]
+        # when capacity is large and percentage of items to be packed is also very large,
+        # then the mean value of weights would be small while its variance is large
+        # there will be good chance to generate instances with negative weights, to avoid this happen
+        # we set an upperbound of the variance
+        upperbound_var = max(support_c)*delta_ratio
+        self._delta = min(delta_ratio*self._C, np.sqrt(upperbound_var))
+        v_min, v_max =0,0
+        while (True):
+            v_min = rd.gauss(m_v_min,var_v)
+            v_max = rd.gauss(m_v_max,var_v)
+            if v_min < v_max:
+                break
+        self._V = np.round(np.random.uniform(v_min,v_max,n))
+        print("The instance will generate scenarios which follows Gaussian Distribution with {} as mean and {} as variance".format(self._C/(self._H*self._N),self._delta**2,self._N))
+    def sample_scenarios(self):
+        W = np.round(np.random.normal(self._C/(self._H*self._N),self._delta**2,self._N)) # weights are not known in advance
+        return W
+    def get_values(self):
+        return self._V
+    def get_penalty(self):
+        return self._Penalty
+    def get_C(self):
+        return self._C
+    def get_H(self):
+        return self._H
 
-N = 30 # number of items
-Support_C = np.array([100,150,200,250,300]) # support of the uniform distribution for capacity
-Support_H = np.array([0.2, 0.4, 0.6,0.8])   # support of the uniform distribution for percentage of items to be packed in expect
-idx_c = rd.randint(0,4)
-idx_h = rd.randint(0,3)
-Penalty = rd.randint(3,8)
-C = Support_C[idx_c]
-H = Support_H[idx_h]
-delta = 0.01*C
-while(True):
-    v_min = rd.gauss(10,4)
-    v_max = rd.gauss(25,4)
-    if v_max>v_min:
+"""
+t = 0
+KS = Instance_KS()
+w = KS.sample_scenarios()
+print(w,"\n", KS.get_values())
+
+while (True):
+    KS = Instance_KS()
+    w = KS.sample_scenarios()
+    if w.all()<=0:
+        print("C = {}".format(KS.get_C()),"\n H = {}".format(KS.get_H()))
         break
+    t += 1
 
-# generate items
-# To avoid numerical issues in solvers we round the values and weights to the nearest integers
-V=np.round(np.random.uniform(v_min,v_max,N))
-
-
-print("The percentage of items to be packed in expect is ",H)
-print("\nThe Knapsack problem is as follows: \n Given a knapsack with capacity {} ".format(C)+ 
-      "there are {} items, with uncertain weights vector follows a gaussian distribution N({},{})and a values vector {}. Determine which items should be packed in order".format(N,C/(H*N),delta**2,V)+
-      " to maximize the total values of items in the knapsack. ")
-
-
-
-def sample_scenarios():
-    W = np.round(np.random.normal(C/(H*N),delta**2,N)) # weights are not known in advance
-    return W
-
+print(t)
+"""
 
