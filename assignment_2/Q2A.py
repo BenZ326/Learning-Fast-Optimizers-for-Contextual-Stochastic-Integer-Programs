@@ -15,7 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import Function_Approximator
 
->>>>>>> xyz-dev
+
 
 
 
@@ -30,7 +30,6 @@ action_tilings = Tiling.create_tilings(action_low, action_high, tilings_specs_ac
 
 
 
->>>>>>> xyz-dev
 class Agent:
 
     """
@@ -87,13 +86,13 @@ class Agent:
         plt.ylabel("estimated value")
         plt.show()
 
->>>>>>> xyz-dev
+
     def _fix_policy(self):
         #action = env.action_space.sample()
         action = np.array([env.unwrapped.max_torque])
         prob = np.random.rand(1)
         self.v = self.state[1]
->>>>>>> xyz-dev
+
         if self.v>0:
             action = abs(action) if prob>=0.1 else -1*abs(action)
             return action
@@ -144,7 +143,7 @@ class Agent:
         return np.mean(state_values,axis=0)
         #plt.plot(range(0,episode_n+1),np.mean(state_values,axis =0))
         #plt.show()
->>>>>>> xyz-dev
+
 
 
 """"
@@ -175,7 +174,7 @@ tiling_specs = [((n, n), (-0.1, +0.33)),
                 ((n, n), (0.0, 0.0)),
                 ((n, n), (0.05, -0.15)),
                 ((n,n),(0.1, -0.33))]
->>>>>>> xyz-dev
+
 tilings = Tiling.create_tilings(low, high, tiling_specs)
 
 
@@ -215,6 +214,4 @@ Learning.MC()
 
 
 
-
->>>>>>> xyz-dev
 
