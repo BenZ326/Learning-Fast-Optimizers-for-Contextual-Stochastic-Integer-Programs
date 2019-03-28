@@ -10,6 +10,7 @@ class BinaryNADE(nn.Module):
     """
 
     def __init__(self, dim_sol, dim_context, dim_hidden):
+        super(BinaryNADE, self).__init__()
         # Initialization const
         self.INIT = 0.01
         # Dimension of the variable vector
@@ -31,7 +32,7 @@ class BinaryNADE(nn.Module):
         self.c = nn.Parameter(
             T.Tensor(self.dim_hidden).uniform_(-self.INIT, self.INIT))
 
-    def forward(self, context, solution):
+    def forward(self, context):
         """
         Forward pass of NADE
 
@@ -49,19 +50,24 @@ class BinaryNADE(nn.Module):
             context
         """
         assert context.shape[0] == self.dim_context, "Context dimension mismatch"
-        assert solution.shape[0] == self.dim_sol, "Solution dimension mismatch"
+        solution = []
 
         a = self.c + T.matmul(self.W[:, : self.dim_context], context)
         p_val = 1
-        p_dist = T.zeros(self.dim_sol)
+        p_dist_1 = T.zeros(self.dim_sol)
+        p_dist_0 = T.zeros(self.dim_sol)
         for i in range(self.dim_sol):
             h = T.sigmoid(a)
-            p_dist[i] = T.sigmoid(self.b[i] + T.matmul(self.V[i], h)).view()
-            p_val = p_val * (T.pow(p_dist[i], solution[i]) +
-                             T.pow(1-p_dist[0], 1-solution[i]))
+            p_dist_1[i] = T.sigmoid(self.b[i] + T.matmul(self.V[i], h)).view()
+            p_dist_0[i] = 1 - p_dist_1[i]
+            # Sample the ith bit of the solution based on p_dist[i]
+            solution.append(T.distributions.Bernoulli(
+                [p_dist_1[i]]).sample()[0])
+            p_val = p_val * (1 - T.pow(p_dist_0[i], solution[i]) +
+                             1 - T.pow(p_dist_1[i], 1-solution[i]))
             a = a + self.W[:, self.dim_context + i] * solution[i]
 
-        return p_val, p_dist
+        return solution, torch.log(p_val)
 
 
 class Baseline(nn.Module):
@@ -71,6 +77,7 @@ class Baseline(nn.Module):
     """
 
     def __init__(self, dim_context, dim_hidden):
+        super(Baseline, self).__init__()
         self.dim_context = dim_context
         self.dim_hidden = dim_hidden
         self.fc1 = nn.Linear(self.dim_context, self.dim_hidden)
@@ -82,9 +89,56 @@ class Baseline(nn.Module):
 
 class InitializationPolicy(BinaryNADE):
 
-    def act(self):
-        pass
+    def __init__(dim_sol, dim_context, dim_hidden):
+        super(InitializationPolicy, self).__init__(
+            dim_sol, dim_context, dim_hidden)
+
+    def act(self, context):
+        solution, log_prob = self.forward(context)
+        return solution, log_prob
 
 
-def REINFORCE():
-    pass
+DIM_CONTEXT = 50
+DIM_HIDDEN = 25
+DIM_SOLUTION = 25
+
+init_policy = InitializationPolicy(DIM_SOLUTION, DIM_CONTEXT, DIM_HIDDEN)
+baseline = Baseline(DIM_CONTEXT, DIM_HIDDEN)
+opt_init = T.optim.Adam(init_policy.parameters(), lr=1e-4)
+opt_base = T.optim.Adam(baseline.parameters(), lr=1e-4)
+
+
+def REINFORCE(context):
+    solution, log_prob = init_policy.act(context)
+    baseline_reward = baseline.forward(context)
+
+    reward = env.step(solution)
+    loss_init = -log_prob * reward
+    loss_base = T.nn.MSELoss().(baseline_reward, reward)
+
+    # Update the initialisation policy
+    opt_init.zero_grad()
+    loss_init.backward()
+    opt_init.step()
+
+    # Update the baseline
+    opt_base.zero_grad()
+    loss_base.backward()
+    opt_base.step()
+
+
+# def train(args):
+#     # Generate environment
+#     # Train for n steps
+#     for epoch in range(args.EPOCHS):
+#         instance = generate_instance()
+#         REINFORCE(instance)
+
+
+# def main():
+#     # Extract args
+#     train(args)
+
+
+# if __name__ == "__main__":
+#     main()
