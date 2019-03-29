@@ -160,7 +160,7 @@ def get_state(_env_state):
 seed = 500
 env = gym.make('Pendulum-v0').env
 env.seed(seed)
->>>>>>> xyz-dev
+
 
 
 observation = env.observation_space

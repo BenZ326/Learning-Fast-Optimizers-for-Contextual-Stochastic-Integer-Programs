@@ -13,6 +13,8 @@ import numpy as np
 #######################################################################
 
 
+
+
 "An abstract class"
 class MIPModel:
     def __init__(self):
@@ -57,38 +59,57 @@ class KS_MIP(MIPModel):
 
     """
     KS: the knapsack instance
+
+    fss: first_stage_solution
     scenario: the sampled scenario to be modeled.
     model the MIP
+
     """
-    def __init__(self,ks,sampled_weights):
+    def __init__(self,ks,fss,sampled_weights):
         MIPModel.__init__(self)
         self.value = ks.get_values()
+        self.penalty = ks.get_penalty()
         self.weight = sampled_weights
         self.capacity = ks.get_C()
+        assert(len(fss) == len(self.value))
+        self.x_star = fss
+
         self.model = Model("knap_sasck")
         self.solution = None
         self.slack = None
         self.opt_obj = None
+
     def solve(self):
         # Create variables
-        x = {}
+        y = {}
+        # auxiliary variables
+        ax = {}
         for i in range(len(self.value)):
-            x[i] = self.model.addVar(vtype="B", name="x(%s)" % i)
+            y[i] = self.model.addVar(vtype="B", name="y(%s)" % i)
+            ax[i] = self.model.addVar(vtype="B", name="ax(%s)" % i)
         slack = self.model.addVar(vtype="C", name="slack")
         # Add constraints
-        self.model.addCons(quicksum(self.weight[j] * x[j] for j in range(len(self.weight))) + slack == self.capacity,
-                    name="capacity constraint")
-        self.model.setObjective(quicksum(self.value[j] * x[j] for j in range(len(self.value))), "maximize")
-        self.model.data = x, slack
+        self.model.addCons(quicksum(self.weight[j] * y[j] for j in range(len(self.weight))) + slack == self.capacity,
+                           name="capacity constraint")
+        for j in range(len(self.value)):
+            self.model.addCons(ax[j] >= self.x_star[j] - y[j])
+        # impose ax[i] = max (y-x,0) api does not support min, max function
+        self.model.setObjective(
+            quicksum(self.value[j] * y[j] + ax[j] * (-1 * self.penalty) for j in range(len(self.value))), "maximize")
+        self.model.data = y, slack
+        self.model.hideOutput()             #silent the output
+
         self.model.optimize()
         status = self.model.getStatus()
         if status == "unbounded" or status == "infeasible":
             return status
-        x, slack = self.model.data
-        X = np.zeros(len(self.weight))
+
+        y, slack = self.model.data
+        Y = np.zeros(len(self.weight))
         for i in range(len(self.weight)):
-            X[i] = self.model.getVal(x[i])
-        self.solution,self.slack,self.opt_obj = X,self.model.getVal(slack),self.model.getObjVal()
+            Y[i] = self.model.getVal(y[i])
+        self.solution, self.slack, self.opt_obj = Y, self.model.getVal(slack), self.model.getObjVal()
+
         return status
 
     def query_solution(self):

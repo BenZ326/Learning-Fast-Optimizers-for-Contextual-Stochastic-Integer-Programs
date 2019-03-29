@@ -1,6 +1,6 @@
 import numpy as np
 import random as rd
-
+import copy
 #######################################################################
 # Authors: Xiangyi Zhang, Rahul Patel                                 #
 #######################################################################
@@ -46,6 +46,8 @@ class Instance_KS:
             if v_min < v_max:
                 break
         self._V = np.round(np.random.uniform(v_min,v_max,n))
+        self._context_vector = np.insert(self._V,0,self._Penalty,axis = 0)
+        self._context_vector = np.insert(self._context_vector,0,self._C, axis = 0)
         print("The instance will generate scenarios which follows Gaussian Distribution with {} as mean and {} as variance".format(self._C/(self._H*self._N),self._delta**2,self._N))
     def sample_scenarios(self):
         W = np.round(np.random.normal(self._C/(self._H*self._N),self._delta**2,self._N)) # weights are not known in advance
@@ -58,6 +60,9 @@ class Instance_KS:
         return self._C
     def get_H(self):
         return self._H
+    def get_context(self):
+        return self._context_vector
+
 
 """
 t = 0
@@ -75,4 +80,17 @@ while (True):
 
 print(t)
 """
+
+""""
+instance generator
+argument1: the name of instance
+"""
+class instance_generator:
+    def __init__(self,name):
+        assert(name.lower()=="knapsack" or name.lower() == "facility location")
+        self.name = name
+    def generate_instance(self):
+        if self.name.lower() == "knapsack":
+            return Instance_KS()
+
 
