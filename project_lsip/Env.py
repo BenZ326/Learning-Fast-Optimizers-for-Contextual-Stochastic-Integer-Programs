@@ -1,42 +1,54 @@
 # An abstract class of Env
+from Model_KS import KS_MIP
 import numpy as np
+
 
 class Env:
     def __init__(self):
         pass
+
     def reset(self):
         pass
-    def seed(self, seed = None):
-        pass
-    def step(self,action):
+
+    def seed(self, seed=None):
         pass
 
-#Environment for two stage stochastic programming
+    def step(self, action):
+        pass
+
+# Environment for two stage stochastic programming
 
 #######################################################################
 # Authors: Xiangyi Zhang, Rahul Patel                                 #
 #######################################################################
 
-from Model_KS import KS_MIP
-import numpy as np
-
 
 class Env_KS(Env):
     """
-     instance: a problem instance
-     N_w: the number of scenarios
+    Arguments
+    ---------        
+    instance: a problem instance
+
+    Returns
+    -------
+    N_w: the number of scenarios
     """
-    def __init__(self,instance,N_w):
+
+    def __init__(self, instance, N_w):
         Env.__init__(self)
         self.instance = instance
         self.N_w = N_w
 
+    def step(self, action):
+        """
+        Arguments
+        ---------
+        action: a solution popped out by NADE
 
-    """
-    action: a solution popped out by NADE
-    return value: reward
-    """
-    def step(self,action):
+        Returns
+        -------
+        return value: reward
+        """
         # get the objective value of first stage
         f_x = action@self.instance.get_values()
         f_y = 0         # the expected cost of second stage
@@ -44,11 +56,9 @@ class Env_KS(Env):
             model = None
             while True:
                 weights = self.instance.sample_scenarios()
-                model = KS_MIP(self.instance,action,weights)
+                model = KS_MIP(self.instance, action, weights)
                 state = model.solve()
-                if state ==  "optimal":
+                if state == "optimal":
                     break
             f_y += model.query_opt_obj()/self.N_w
-        return f_x + f_y
-
-
+        return np.array([f_x + f_y]).reshape(-1)

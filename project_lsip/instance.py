@@ -22,13 +22,15 @@ The class has the following attributes:
 5. self._H: the percentage of items to be packed in expect
 6. self._V: the values of items
 """
+
+
 class Instance_KS:
-    def __init__(self, n=30, support_c=np.array([100,200,300]),
-                 support_h = np.array([0.2, 0.4, 0.6]),
-                 lb_p = 3, ub_p = 8, delta_ratio = 0.01,
-                 m_v_min = 10, m_v_max = 40, var_v = 4):
+    def __init__(self, n=30, support_c=np.array([100, 200, 300]),
+                 support_h=np.array([0.2, 0.4, 0.6]),
+                 lb_p=3, ub_p=8, delta_ratio=0.01,
+                 m_v_min=10, m_v_max=40, var_v=4):
         self._N = n
-        self._Penalty = rd.randint(lb_p,ub_p)
+        self._Penalty = rd.randint(lb_p, ub_p)
         idx_c = rd.randint(0, len(support_c) - 1)
         idx_h = rd.randint(0, len(support_h) - 1)
         self._C = support_c[idx_c]
@@ -39,27 +41,37 @@ class Instance_KS:
         # we set an upperbound of the variance
         upperbound_var = max(support_c)*delta_ratio
         self._delta = min(delta_ratio*self._C, np.sqrt(upperbound_var))
-        v_min, v_max =0,0
+        v_min, v_max = 0, 0
         while (True):
-            v_min = rd.gauss(m_v_min,var_v)
-            v_max = rd.gauss(m_v_max,var_v)
+            v_min = rd.gauss(m_v_min, var_v)
+            v_max = rd.gauss(m_v_max, var_v)
             if v_min < v_max:
                 break
-        self._V = np.round(np.random.uniform(v_min,v_max,n))
-        self._context_vector = np.insert(self._V,0,self._Penalty,axis = 0)
-        self._context_vector = np.insert(self._context_vector,0,self._C, axis = 0)
-        print("The instance will generate scenarios which follows Gaussian Distribution with {} as mean and {} as variance".format(self._C/(self._H*self._N),self._delta**2,self._N))
+        self._V = np.round(np.random.uniform(v_min, v_max, n))
+        self._context_vector = np.insert(self._V, 0, self._Penalty, axis=0)
+        self._context_vector = np.insert(
+            self._context_vector, 0, self._C, axis=0)
+        print("The instance will generate scenarios which follows Gaussian Distribution with {} as mean and {} as variance".format(
+            self._C/(self._H*self._N), self._delta**2, self._N))
+
     def sample_scenarios(self):
-        W = np.round(np.random.normal(self._C/(self._H*self._N),self._delta**2,self._N)) # weights are not known in advance
+        # weights are not known in advance
+        W = np.round(np.random.normal(
+            self._C/(self._H*self._N), self._delta**2, self._N))
         return W
+
     def get_values(self):
         return self._V
+
     def get_penalty(self):
         return self._Penalty
+
     def get_C(self):
         return self._C
+
     def get_H(self):
         return self._H
+
     def get_context(self):
         return self._context_vector
 
@@ -85,12 +97,14 @@ print(t)
 instance generator
 argument1: the name of instance
 """
+
+
 class instance_generator:
-    def __init__(self,name):
-        assert(name.lower()=="knapsack" or name.lower() == "facility location")
+    def __init__(self, name):
+        assert(name.lower() == "ks" or name.lower() == "fl")
         self.name = name
+
     def generate_instance(self):
-        if self.name.lower() == "knapsack":
+        if self.name.lower() == "ks":
+            print("Returning KS")
             return Instance_KS()
-
-
