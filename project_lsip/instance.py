@@ -52,12 +52,12 @@ class Instance_KS:
         self._context_vector = np.insert(
             self._context_vector, 0, self._C, axis=0)
         print("The instance will generate scenarios which follows Gaussian Distribution with {} as mean and {} as variance".format(
-            self._C/(self._H*self._N), self._delta**2, self._N))
+            20, self._delta**2))
 
     def sample_scenarios(self):
         # weights are not known in advance
-        W = np.round(np.random.normal(
-            self._C/(self._H*self._N), self._delta**2, self._N))
+        W = np.round(np.random.normal(20, self._delta**2, self._N))
+        # self._C/(self._H*self._N), self._delta**2, self._N))
         return W
 
     def get_values(self):

@@ -1,7 +1,7 @@
 from Model_KS import KS_MIP
 from instance import instance_generator
 import numpy as np
-from Env import Env_KS
+from environment import Env_KS
 
 PROBLEM = "ks"
 
