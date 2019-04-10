@@ -26,7 +26,7 @@ class extensive:
             w = self._instance.sample_scenarios()
             ex_model.addCons(quicksum(w[i]*(x[i]-y[i,s]) for i in range(len(values)))<=self._instance.get_C(),"respect capacity for scenario {}".format(s))
         ex_model.setObjective(quicksum(x[i]*values[i] for i in range(len(values)))-(1/self._n_w)
-                              *quicksum(quicksum(y[i,s]*self._instance.get_penalty() for i in range(len(values))) for s in range(self._n_w)),
+                              *quicksum(quicksum(y[i,s]*(self._instance.get_penalty()+values[i]) for i in range(len(values))) for s in range(self._n_w)),
                               "maximize")
         ex_model.data = x, y
         ex_model.hideOutput()

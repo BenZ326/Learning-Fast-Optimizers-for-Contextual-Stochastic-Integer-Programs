@@ -76,7 +76,7 @@ def train(args):
         instance = generator.generate_instance()
         context = instance.get_context()
         # Generate environment
-        env = Env_KS(instance, 2000)
+        env = Env_KS(instance, 200)
 
         # Learn using REINFORCE
 
@@ -92,7 +92,7 @@ def train(args):
         print("reward is {}".format(reward))
         loss_init.append(loss_init_.item())
 
-        if epoch % 1 == 0:
+        if epoch % 50 == 0:
             # Save the data file
             np.save("scip_reward.npy",scip_reward)
             np.save("reward.npy", reward)

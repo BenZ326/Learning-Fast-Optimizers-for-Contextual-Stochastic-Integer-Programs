@@ -83,19 +83,19 @@ class KS_MIP(MIPModel):
         # Create variables
         y = {}
         # auxiliary variables
-        ax = {}
+        #ax = {}
         for i in range(len(self.value)):
             y[i] = self.model.addVar(vtype="B", name="y(%s)" % i)
-            ax[i] = self.model.addVar(vtype="B", name="ax(%s)" % i)
+            #ax[i] = self.model.addVar(vtype="B", name="ax(%s)" % i)
         slack = self.model.addVar(vtype="C", name="slack")
         # Add constraints
-        self.model.addCons(quicksum(self.weight[j] * y[j] for j in range(len(self.weight))) + slack == self.capacity,
+        self.model.addCons(quicksum(self.weight[j] * (self.x_star[j]-y[j]) for j in range(len(self.weight))) <= self.capacity,
                            name="capacity constraint")
         for j in range(len(self.value)):
-            self.model.addCons(ax[j] >= self.x_star[j] - y[j])
+            self.model.addCons( y[j]<=self.x_star[j])
         # impose ax[i] = max (y-x,0) api does not support min, max function
         self.model.setObjective(
-            quicksum(self.value[j] * y[j] + ax[j] * (-1 * self.penalty) for j in range(len(self.value))), "maximize")
+            quicksum(-1*self.value[j] * y[j]+ y[j] * (-1 * self.penalty) for j in range(len(self.value))), "maximize")
         self.model.data = y, slack
         self.model.hideOutput()             #silent the output
 
