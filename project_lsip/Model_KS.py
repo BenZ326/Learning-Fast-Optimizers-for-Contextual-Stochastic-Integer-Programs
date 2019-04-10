@@ -110,6 +110,7 @@ class KS_MIP(MIPModel):
             Y[i] = self.model.getVal(y[i])
         self.solution, self.slack, self.opt_obj = Y, self.model.getVal(slack), self.model.getObjVal()
 
+
         return status
 
     def query_solution(self):

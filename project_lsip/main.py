@@ -5,6 +5,7 @@ from initialisation_policy import Baseline
 
 import torch as T
 import argparse
+import numpy as np
 
 ##################################################################
 #                       DEFAULT PARAMETERS                       #
@@ -51,6 +52,7 @@ def parse_args():
 def train(args):
     print("Inside Train...")
     reward = []
+    scip_reward = []    # scip_opt
     loss_init = []
     generator = instance_generator(args.problem)
 
@@ -77,14 +79,22 @@ def train(args):
         env = Env_KS(instance, 2000)
 
         # Learn using REINFORCE
+
+
+        _, tmp_opt,scip_gap = env.extensive_form()
+        print("scip is {}".format(tmp_opt))
+        print("the gap is {}".format(scip_gap))
+        scip_reward.append(tmp_opt)
         reward_, loss_init_ = init_policy.REINFORCE(
             init_opt, env, context)
 
         reward.append(reward_.item())
+        print("reward is {}".format(reward))
         loss_init.append(loss_init_.item())
 
-        if epoch % 50 == 0:
+        if epoch % 1 == 0:
             # Save the data file
+            np.save("scip_reward.npy",scip_reward)
             np.save("reward.npy", reward)
             np.save("loss_init.npy", loss_init)
             T.save(init_policy.state_dict(), "init_policy")

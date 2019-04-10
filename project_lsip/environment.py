@@ -1,6 +1,7 @@
 # An abstract class of Env
 from Model_KS import KS_MIP
 import numpy as np
+from base_line_alg import  extensive
 
 
 class Env:
@@ -38,6 +39,12 @@ class Env_KS(Env):
         Env.__init__(self)
         self.instance = instance
         self.N_w = N_w
+
+
+    def extensive_form(self):
+        ex_model = extensive(self.instance,self.N_w)
+        ex_model.solve(1000)
+        return ex_model.solution, ex_model.opt_obj, ex_model.gap
 
     def step(self, action):
         """

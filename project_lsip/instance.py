@@ -30,7 +30,7 @@ class Instance_KS:
                  lb_p=3, ub_p=8, delta_ratio=0.01,
                  m_v_min=10, m_v_max=40, var_v=4):
         self._N = n
-        self._Penalty = rd.randint(lb_p, ub_p)
+        self._Penalty = 5/m_v_max
         idx_c = rd.randint(0, len(support_c) - 1)
         idx_h = rd.randint(0, len(support_h) - 1)
         self._C = support_c[idx_c]
@@ -40,14 +40,18 @@ class Instance_KS:
         # there will be good chance to generate instances with negative weights, to avoid this happen
         # we set an upperbound of the variance
         upperbound_var = max(support_c)*delta_ratio
-        self._delta = min(delta_ratio*self._C, np.sqrt(upperbound_var))
+        #self._delta = min(delta_ratio*self._C, np.sqrt(upperbound_var))
+        self._delta = np.sqrt(3)
         v_min, v_max = 0, 0
         while (True):
-            v_min = rd.gauss(m_v_min, var_v)
-            v_max = rd.gauss(m_v_max, var_v)
+            #v_min = rd.gauss(m_v_min, var_v)
+            #v_max = rd.gauss(m_v_max, var_v)
+            v_min = m_v_min
+            v_max = m_v_max
             if v_min < v_max:
                 break
-        self._V = np.round(np.random.uniform(v_min, v_max, n))
+        # to scale values into (0,1]
+        self._V = np.round(np.random.uniform(v_min/v_max, 1, n))
         self._context_vector = np.insert(self._V, 0, self._Penalty, axis=0)
         self._context_vector = np.insert(
             self._context_vector, 0, self._C, axis=0)
