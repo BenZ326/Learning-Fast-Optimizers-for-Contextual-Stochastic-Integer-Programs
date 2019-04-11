@@ -51,7 +51,6 @@ class NADEInitializationPolicy(nn.Module):
             Probability distribution along the dimensions of x conditioned on
             context
         """
-        # print(context, "\n", context.shape)
         assert context.shape[0] == self.dim_context, "Context dimension mismatch"
         context = T.from_numpy(context).float()
 

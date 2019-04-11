@@ -78,13 +78,13 @@ def update_baseline_model(loss_fn, y_hat, y, optimizer):
     optimizer.step()
 
 
-def evaluate_model(args, model, generator, eval_sqdist, eval_rp, eval_nbr, ev_random, ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
+
+def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random,eval_nbr,  ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
     """
     The evaulation function to compare the gap between initialization policy and scip solver
     policy: the policy
     generator: instance generator
     """
-
     print("starting to evaluate")
     square_dist = 0
     relative_dist = 0
@@ -187,9 +187,9 @@ def train(args):
             np.save("ev_scip.npy", ev_scip)
             np.save("ev_policy", ev_policy)
             np.save("env_gap", env_gap)
-            np.save("eval_sqdist.npy", eval_sqdist)
-            np.save("eval_rp.npy", eval_sqdist)
-            np.save("eval_nbr.npy", eval_sqdist)
+            np.save("eval_sqdist.npy",eval_sqdist)
+            np.save("eval_rp.npy", eval_rp)
+            np.save("eval_nbr.npy", eval_nbr)
             np.save("reward.npy", reward)
             np.save("loss_init.npy", loss_init)
             T.save(init_policy.state_dict(), "init_policy")
