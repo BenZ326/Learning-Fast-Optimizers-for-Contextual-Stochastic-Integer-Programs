@@ -1,9 +1,11 @@
 import torch as T
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+from torch.distributions.bernoulli import Bernoulli
 
 
-class InitializationPolicy(nn.Module):
+class NADEInitializationPolicy(nn.Module):
     """
     Binary NADE module to learn a probability distribution over solution
     given the context vector i.e. P(x | c)
@@ -79,14 +81,71 @@ class InitializationPolicy(nn.Module):
         solution = T.stack(solution)
         return solution, T.log(p_val[i-1])
 
-    def REINFORCE(self, opt_init, env, context):
+    def REINFORCE(self, opt_init, env, context, baseline_reward=None, use_baseline=False):
         solution, log_prob = self.forward(context)
-        # baseline_reward = baseline.forward(context)
-        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
 
-        loss_init = -log_prob * reward
-        print("Reward: {}\t Loss: {}".format(reward, loss_init))
-        # loss_base = T.nn.MSELoss().(baseline_reward, reward)
+        # Get reward from the environment and calculate loss
+        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+        if use_baseline:
+            loss_init = -log_prob * (reward - baseline_reward.item())
+        else:
+            loss_init = -log_prob * reward
+        print("Reward: {}".format(reward))
+
+        # Update the initialisation policy
+        opt_init.zero_grad()
+        loss_init.backward()
+        opt_init.step()
+
+        return reward, loss_init
+
+
+class NNInitialisationPolicy(nn.Module):
+    def __init__(self, dim_problem, dim_context, dim_hidden):
+        super(NNInitialisationPolicy, self).__init__()
+        # Initialization const
+        self.INIT = 0.01
+        # Dimension of the variable vector
+        self.dim_problem = dim_problem
+        # Dimension of the context vector
+        self.dim_context = dim_context
+        # Dimension of the hidden_vector
+        self.dim_hidden = dim_hidden
+        self.linear_1 = nn.Linear(self.dim_context, self.dim_hidden)
+        self.linear_2 = nn.Linear(self.dim_hidden, self.dim_hidden)
+        self.output = nn.Linear(self.dim_hidden, self.dim_problem)
+
+    def forward(self, context):
+        x = F.relu(self.linear_1(context))
+        x = F.relu(self.linear_2(x))
+        solution_probs = T.sigmoid(self.output(x))
+        return solution_probs
+
+    def REINFORCE(self, opt_init, env, context, use_baseline=False):
+        # Sample solution
+        solution_probs = self.forward(context)
+        m = Bernoulli(solution_probs)
+        solution = m.sample().detach()
+
+        # Find the joint probability
+        joint[0] = T.ones(1)
+        for i in solution:
+            if solution[i] == 0:
+                joint[i] = joint[i-1] * (1-solution_probs[i])
+            elif solution[i] == 1:
+                joint[i] = joint[i-1] * solution_probs[i]
+
+        # Get reward from the environment
+        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+        if use_baseline:
+            baseline_reward = baseline.forward(context)
+            loss_init = -log_prob * (reward - baseline_reward.clone().detach())
+        else:
+            loss_init = -log_prob * reward
+        print("Reward: {}".format(reward))
+
+        loss_init = -joint[i] * reward
+        print("Reward: {}".format(reward))
 
         # Update the initialisation policy
         opt_init.zero_grad()
@@ -94,31 +153,18 @@ class InitializationPolicy(nn.Module):
         opt_init.step()
 
         # Update the baseline
-        # opt_base.zero_grad()
-        # loss_base.backward()
-        # opt_base.step()
-
-        solution, log_prob = self.forward(context)
-        # baseline_reward = baseline.forward(context)
-        reward_ = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
-        # baseline = baseline_net.forward(context)
-        # print(log_prob, baseline, reward_)
-        # loss_init_ = -log_prob * (reward_ - baseline.clone().detach().float())
-        loss_init_ = -log_prob * reward_
-        print("Reward: {}\t Loss: {}".format(reward_, loss_init_))
-        # baseline_output = loss_base(baseline, reward_)
-
-        # Update the initialisation policy
-        opt_init.zero_grad()
-        loss_init_.backward()
-        opt_init.step()
-
-        # Update the baseline
-        # opt_base.zero_grad()
-        # baseline_output.backward()
-        # opt_base.step()
+        if use_baseline:
+            loss_baseline_fn = T.nn.MSELoss()
+            loss_baseline = loss_baseline_fn(baseline_reward, reward)
+            opt_base.zero_grad()
+            loss_baseline.backward()
+            opt_base.step()
 
         return reward, loss_init
+
+
+class RNNInitialisationPolicy(nn.Module):
+    pass
 
 
 class Baseline(nn.Module):
@@ -140,3 +186,7 @@ class Baseline(nn.Module):
         out = self.relu(self.fc1(context))
         out = self.fc2(out)
         return out
+
+
+if __name__ == "__main__":
+    # pass
