@@ -1,7 +1,7 @@
 from environment import Env_KS
 from instance import instance_generator
 from initialisation_policy import NADEInitializationPolicy
-# from initialisation_policy import NNInitialisationPolicy
+from initialisation_policy import NNInitialisationPolicy
 from initialisation_policy import Baseline
 
 import torch as T
@@ -28,19 +28,24 @@ STR["FFNN"] = "FFNN"
 
 N_w = 200
 
+
 def parse_args():
     """
     Parse the argumets provided during program execution. Use the default
     if a given argument is not provided during execution.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--init_model", type=str, default=DEFAULT["INIT_MODEL"])
-    parser.add_argument("--init_lr_rate", type=float, default=DEFAULT["INIT_LR_RATE"])
+    parser.add_argument("--init_model", type=str,
+                        default=DEFAULT["INIT_MODEL"])
+    parser.add_argument("--init_lr_rate", type=float,
+                        default=DEFAULT["INIT_LR_RATE"])
     parser.add_argument("--init_epochs", type=int, default=DEFAULT["EPOCHS"])
-    parser.add_argument("--use_baseline", type=bool, default=DEFAULT["USE_BASELINE"])
+    parser.add_argument("--use_baseline", type=bool,
+                        default=DEFAULT["USE_BASELINE"])
     parser.add_argument('--is_penalty_same', type=bool,
                         default=DEFAULT["IS_PENALTY_SAME"])
-    parser.add_argument("--num_of_scenarios", type=int, default=DEFAULT["NO_OF_SCENARIOS"])
+    parser.add_argument("--num_of_scenarios", type=int,
+                        default=DEFAULT["NO_OF_SCENARIOS"])
 
     parser.add_argument("--problem", type=str, default=DEFAULT["PROBLEM"])
     parser.add_argument("--dim_hidden", type=int,
@@ -63,36 +68,6 @@ def parse_args():
         args.dim_hidden = int(args.dim_problem/3)
     return args
 
-""""
-The evaulation function to compare the gap between initialization policy and scip solver
-policy: the policy
-generator: instance generator
-"""
-# def evaluate(policy, generator, n = 10):
-#     print("starting to evaluate")
-#     ev_scip = []
-#     ev_policy = []
-#     square_dist = 0
-#     relative_dist = 0
-#     num_rl_better = 0
-#     for i in range(n):
-#         instance = generator.generate_instance()
-#         context = instance.get_context()
-#         env = Env_KS(instance, N_w)
-#         _, reward_scip, scip_gap = env.extensive_form()
-#         policy.eval()
-#         solution = policy.forward(context)
-#         reward_policy = env.step(solution)
-#         ev_scip.append(reward_scip)
-#         ev_policy.append(reward_policy)
-#         square_dist += (reward_scip-reward_policy)**2
-#         relative_dist += (reward_scip-reward_policy)/reward_scip
-#         print("reward got by scip is {}".format(reward_scip))
-#         print("reward got by policy is {}".format(reward_policy))
-#         if reward_scip<=reward_policy:
-#             num_rl_better += 1
-#     return square_dist/n, relative_dist/n, num_rl_better
-
 
 def update_baseline_model(loss_fn, y_hat, y, optimizer):
     """Update the loss of the Baseline Policy
@@ -102,15 +77,21 @@ def update_baseline_model(loss_fn, y_hat, y, optimizer):
     loss.backward()
     optimizer.step()
 
-def evaluate_model(args,model, generator, eval_sqdist, eval_rp, eval_nbr,ev_random,ev_scip,ev_policy,env_gap):
+
+def evaluate_model(args, model, generator, eval_sqdist, eval_rp, eval_nbr, ev_random, ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
+    """
+    The evaulation function to compare the gap between initialization policy and scip solver
+    policy: the policy
+    generator: instance generator
+    """
+
     print("starting to evaluate")
     square_dist = 0
     relative_dist = 0
     num_rl_better = 0
     model.eval()
-    for i in range(args.num_of_scenarios):
+    for i in range(TEST_INSTANCES):
         instance = generator.generate_instance()
-
 
         context = instance.get_context()
         env = Env_KS(instance, N_w)
@@ -119,8 +100,9 @@ def evaluate_model(args,model, generator, eval_sqdist, eval_rp, eval_nbr,ev_rand
         ev_scip.append(reward_scip)
         solution, _ = model.forward(context)
         reward_policy = env.step(solution.numpy().reshape(-1))[0]
-        #randomly generate binary vector
-        random_solution =  np.random.randint(0,2,size=args.dim_problem).reshape(-1)
+        # randomly generate binary vector
+        random_solution = np.random.randint(
+            0, 2, size=args.dim_problem).reshape(-1)
         reward_random = env.step(random_solution)[0]
         ev_random.append(reward_random)
         ev_policy.append(reward_policy)
@@ -133,8 +115,8 @@ def evaluate_model(args,model, generator, eval_sqdist, eval_rp, eval_nbr,ev_rand
         print("reward got by random is {}".format(reward_random))
         if reward_scip <= reward_policy:
             num_rl_better += 1
-    eval_sqdist.append(square_dist / args.num_of_scenarios)
-    eval_rp.append(relative_dist / args.num_of_scenarios)
+    eval_sqdist.append(square_dist / TEST_INSTANCES)
+    eval_rp.append(relative_dist / TEST_INSTANCES)
     eval_nbr.append(num_rl_better)
 
 
@@ -142,9 +124,9 @@ def train(args):
     print("Inside Train...")
     reward = []
     loss_init = []
-    ev_scip=[]
-    ev_policy=[]
-    env_gap=[]
+    ev_scip = []
+    ev_policy = []
+    env_gap = []
     ev_random = []
     generator = instance_generator(args.problem)
 
@@ -155,8 +137,8 @@ def train(args):
             args.dim_problem, args.dim_context, args.dim_hidden)
     elif args.init_model == STR["FFNN"]:
         # Use FFNN as initialisation policy
-        # init_policy = NNInitialisationPolicy(
-        #     args.dim_problem, args.dim_context, args.dim_hidden)
+        init_policy = NNInitialisationPolicy(
+            args.dim_problem, args.dim_context, args.dim_hidden)
         pass
     init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
 
@@ -172,21 +154,22 @@ def train(args):
 
     # Train
     for epoch in range(1, args.init_epochs+1):
-        if epoch == 1:
-            evaluate_model(args,init_policy, generator, eval_sqdist, eval_rp,ev_random, eval_nbr,ev_scip,ev_policy,env_gap)
+        # if epoch == 1:
+        #     evaluate_model(args, init_policy, generator, eval_sqdist,
+        #                    eval_rp, ev_random, eval_nbr, ev_scip, ev_policy, env_gap)
+        print("******************************************************")
         print("Epoch : {}".format(epoch))
         # Generate instance and environment
         instance = generator.generate_instance()
         context = instance.get_context()
         env = Env_KS(instance, DEFAULT["NO_OF_SCENARIOS"])
 
-
         # Learn using REINFORCE
         # If using baseline, update the baseline net
         if args.use_baseline:
             baseline_reward = baseline_net.forward(context)
             reward_, loss_init_ = init_policy.REINFORCE(
-                init_opt, env, context, baseline_reward)
+                init_opt, env, context, baseline_reward, True)
             update_baseline_model(
                 loss_base_fn, baseline_reward, reward_, opt_base)
         # Without using baseline
@@ -195,23 +178,22 @@ def train(args):
                 init_opt, env, context)
 
         reward.append(reward_.item())
-        print("reward is {}".format(reward))
         loss_init.append(loss_init_.item())
-
         if epoch % 50 == 0:
             # Save the data file
             evaluate_model(args, init_policy, generator, eval_sqdist, eval_rp, ev_random, eval_nbr, ev_scip, ev_policy,
                            env_gap)
-            np.save("ev_random.npy",ev_random)
-            np.save("ev_scip.npy",ev_scip)
+            np.save("ev_random.npy", ev_random)
+            np.save("ev_scip.npy", ev_scip)
             np.save("ev_policy", ev_policy)
             np.save("env_gap", env_gap)
-            np.save("eval_sqdist.npy",eval_sqdist)
+            np.save("eval_sqdist.npy", eval_sqdist)
             np.save("eval_rp.npy", eval_sqdist)
             np.save("eval_nbr.npy", eval_sqdist)
             np.save("reward.npy", reward)
             np.save("loss_init.npy", loss_init)
             T.save(init_policy.state_dict(), "init_policy")
+
 
 if __name__ == "__main__":
     args = parse_args()
