@@ -1,6 +1,7 @@
 from environment import Env_KS
 from instance import instance_generator
-from initialisation_policy import InitializationPolicy
+from initialisation_policy import NADEInitializationPolicy
+from initialisation_policy import NNInitialisationPolicy
 from initialisation_policy import Baseline
 
 import torch as T
@@ -11,11 +12,19 @@ import numpy as np
 #                       DEFAULT PARAMETERS                       #
 ##################################################################
 DEFAULT = {}
-DEFAULT["EPOCHS"] = 1000
+DEFAULT["EPOCHS"] = 500
 DEFAULT["PROBLEM"] = "ks"
 DEFAULT["IS_PENALTY_SAME"] = True
 DEFAULT["DIM_HIDDEN"] = 10
-DEFAULT["DIM_PROBLEM"] = 30
+DEFAULT["DIM_PROBLEM"] = 25
+DEFAULT["INIT_MODEL"] = "NADE"
+DEFAULT["INIT_LR_RATE"] = 1e-3
+DEFAULT["NO_OF_SCENARIOS"] = 200
+DEFAULT["USE_BASELINE"] = False
+
+STR = {}
+STR["NADE"] = "NADE"
+STR["FFNN"] = "FFNN"
 
 
 def parse_args():
@@ -24,10 +33,14 @@ def parse_args():
     if a given argument is not provided during execution.
     """
     parser = argparse.ArgumentParser()
+    parser.add_argument("--init_model", type=str, DEFAULT["INIT_MODEL"])
+    parser.add_argument("--init_lr_rate", type=float, DEFAULT["INIT_LR_RATE"])
     parser.add_argument("--init_epochs", type=int, default=DEFAULT["EPOCHS"])
-    parser.add_argument("--problem", type=str, default=DEFAULT["PROBLEM"])
+    parser.add_argument("--use_baseline", type=bool, DEFAULT["USE_BASELINE"])
     parser.add_argument('--is_penalty_same', type=bool,
                         default=DEFAULT["IS_PENALTY_SAME"])
+
+    parser.add_argument("--problem", type=str, default=DEFAULT["PROBLEM"])
     parser.add_argument("--dim_hidden", type=int,
                         default=DEFAULT["DIM_HIDDEN"])
     parser.add_argument("--dim_problem", type=int,
@@ -49,6 +62,15 @@ def parse_args():
     return args
 
 
+def update_baseline_model(loss_fn, y_hat, y, optimizer):
+    """Update the loss of the Baseline Policy
+    """
+    loss = loss_fn(y_hat, y)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+
 def train(args):
     print("Inside Train...")
     reward = []
@@ -56,37 +78,48 @@ def train(args):
     loss_init = []
     generator = instance_generator(args.problem)
 
-    # InitializationPolicy
-    init_policy = InitializationPolicy(
-        args.dim_problem, args.dim_context, args.dim_hidden)
-    # InitializationPolicy Optimizer
-    init_opt = T.optim.Adam(init_policy.parameters(), lr=1e-4)
+    # Select initialisation policy
+    if args.init_model == STR["NADE"]:
+        # Use NADE as initialisation policy
+        init_policy = NADEInitializationPolicy(
+            args.dim_problem, args.dim_context, args.dim_hidden)
+    elif args.init_model == STR["FFNN"]:
+        # Use FFNN as initialisation policy
+        init_policy = NNInitialisationPolicy(
+            args.dim_problem, args.dim_context, args.dim_hidden)
+    init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
 
-    # Baseline
-    baseline_net = Baseline(args.dim_context, args.dim_hidden)
-    # Baseline optimizer
-    opt_base = T.optim.Adam(baseline_net.parameters(), lr=1e-4)
-    # Loss calculator for baseline
-    loss_base = T.nn.MSELoss()
+    # Initialize baseline if required
+    if args.use_baseline:
+        baseline_net = Baseline(args.dim_context, args.dim_hidden)
+        opt_base = T.optim.Adam(baseline_net.parameters(), lr=1e-4)
+        loss_base_fn = T.nn.MSELoss()
 
     # Train
     for epoch in range(1, args.init_epochs+1):
         print("Epoch : {}".format(epoch))
-        # Generate instance
+        # Generate instance and environment
         instance = generator.generate_instance()
         context = instance.get_context()
-        # Generate environment
-        env = Env_KS(instance, 200)
+        env = Env_KS(instance, DEFAULT["NO_OF_SCENARIOS"])
 
-        # Learn using REINFORCE
-
-
-        _, tmp_opt,scip_gap = env.extensive_form()
+        _, tmp_opt, scip_gap = env.extensive_form()
         print("scip is {}".format(tmp_opt))
         print("the gap is {}".format(scip_gap))
         scip_reward.append(tmp_opt)
-        reward_, loss_init_ = init_policy.REINFORCE(
-            init_opt, env, context)
+
+        # Learn using REINFORCE
+        # If using baseline, update the baseline net
+        if args.use_baseline:
+            baseline_reward = baseline_net.forward(context)
+            reward_, loss_init_ = init_policy.REINFORCE(
+                init_opt, env, context, baseline_reward)
+            update_baseline_model(
+                loss_base_fn, baseline_reward, reward_, opt_base)
+        # Without using baseline
+        else:
+            reward_, loss_init_ = init_policy.REINFORCE(
+                init_opt, env, context)
 
         reward.append(reward_.item())
         print("reward is {}".format(reward))
@@ -94,7 +127,7 @@ def train(args):
 
         if epoch % 50 == 0:
             # Save the data file
-            np.save("scip_reward.npy",scip_reward)
+            np.save("scip_reward.npy", scip_reward)
             np.save("reward.npy", reward)
             np.save("loss_init.npy", loss_init)
             T.save(init_policy.state_dict(), "init_policy")
