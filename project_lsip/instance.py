@@ -25,7 +25,7 @@ The class has the following attributes:
 
 
 class Instance_KS:
-    def __init__(self, n=30, support_c=np.array([100, 200, 300]),
+    def __init__(self, n=25, support_c=np.array([100, 200, 300]),
                  support_h=np.array([0.2, 0.4, 0.6]),
                  lb_p=3, ub_p=8, delta_ratio=0.01,
                  m_v_min=10, m_v_max=40, var_v=4):
@@ -51,7 +51,7 @@ class Instance_KS:
             if v_min < v_max:
                 break
         # to scale values into (0,1]
-        self._V = np.round(np.random.uniform(v_min/v_max, 1, n))
+        self._V = np.random.uniform(v_min/v_max, 1, n)
         self._context_vector = np.insert(self._V, 0, self._Penalty, axis=0)
         self._context_vector = np.insert(
             self._context_vector, 0, self._C, axis=0)

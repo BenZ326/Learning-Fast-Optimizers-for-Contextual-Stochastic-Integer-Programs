@@ -43,7 +43,7 @@ class Env_KS(Env):
 
     def extensive_form(self):
         ex_model = extensive(self.instance,self.N_w)
-        ex_model.solve(200)
+        ex_model.solve(20)
         self._action_ex = ex_model.solution
         return ex_model.solution, ex_model.opt_obj, ex_model.gap
 

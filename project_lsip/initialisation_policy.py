@@ -12,7 +12,7 @@ class NADEInitializationPolicy(nn.Module):
     """
 
     def __init__(self, dim_problem, dim_context, dim_hidden):
-        super(InitializationPolicy, self).__init__()
+        super(NADEInitializationPolicy, self).__init__()
         # Initialization const
         self.INIT = 0.01
         # Dimension of the variable vector
@@ -51,6 +51,7 @@ class NADEInitializationPolicy(nn.Module):
             Probability distribution along the dimensions of x conditioned on
             context
         """
+        print(context,"\n",context.shape)
         assert context.shape[0] == self.dim_context, "Context dimension mismatch"
         context = T.from_numpy(context).float()
 
@@ -100,67 +101,68 @@ class NADEInitializationPolicy(nn.Module):
         return reward, loss_init
 
 
-class NNInitialisationPolicy(nn.Module):
-    def __init__(self, dim_problem, dim_context, dim_hidden):
-        super(NNInitialisationPolicy, self).__init__()
-        # Initialization const
-        self.INIT = 0.01
-        # Dimension of the variable vector
-        self.dim_problem = dim_problem
-        # Dimension of the context vector
-        self.dim_context = dim_context
-        # Dimension of the hidden_vector
-        self.dim_hidden = dim_hidden
-        self.linear_1 = nn.Linear(self.dim_context, self.dim_hidden)
-        self.linear_2 = nn.Linear(self.dim_hidden, self.dim_hidden)
-        self.output = nn.Linear(self.dim_hidden, self.dim_problem)
-
-    def forward(self, context):
-        x = F.relu(self.linear_1(context))
-        x = F.relu(self.linear_2(x))
-        solution_probs = T.sigmoid(self.output(x))
-        return solution_probs
-
-    def REINFORCE(self, opt_init, env, context, use_baseline=False):
-        # Sample solution
-        solution_probs = self.forward(context)
-        m = Bernoulli(solution_probs)
-        solution = m.sample().detach()
-
-        # Find the joint probability
-        joint[0] = T.ones(1)
-        for i in solution:
-            if solution[i] == 0:
-                joint[i] = joint[i-1] * (1-solution_probs[i])
-            elif solution[i] == 1:
-                joint[i] = joint[i-1] * solution_probs[i]
-
-        # Get reward from the environment
-        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
-        if use_baseline:
-            baseline_reward = baseline.forward(context)
-            loss_init = -log_prob * (reward - baseline_reward.clone().detach())
-        else:
-            loss_init = -log_prob * reward
-        print("Reward: {}".format(reward))
-
-        loss_init = -joint[i] * reward
-        print("Reward: {}".format(reward))
-
-        # Update the initialisation policy
-        opt_init.zero_grad()
-        loss_init.backward()
-        opt_init.step()
-
-        # Update the baseline
-        if use_baseline:
-            loss_baseline_fn = T.nn.MSELoss()
-            loss_baseline = loss_baseline_fn(baseline_reward, reward)
-            opt_base.zero_grad()
-            loss_baseline.backward()
-            opt_base.step()
-
-        return reward, loss_init
+# class NNInitialisationPolicy(nn.Module):
+#     def __init__(self, dim_problem, dim_context, dim_hidden):
+#         super(NNInitialisationPolicy, self).__init__()
+#         # Initialization const
+#         self.INIT = 0.01
+#         # Dimension of the variable vector
+#         self.dim_problem = dim_problem
+#         # Dimension of the context vector
+#         self.dim_context = dim_context
+#         # Dimension of the hidden_vector
+#         self.dim_hidden = dim_hidden
+#         self.linear_1 = nn.Linear(self.dim_context, self.dim_hidden)
+#         self.linear_2 = nn.Linear(self.dim_hidden, self.dim_hidden)
+#         self.output = nn.Linear(self.dim_hidden, self.dim_problem)
+#
+#     def forward(self, context):
+#         x = F.relu(self.linear_1(context))
+#         x = F.relu(self.linear_2(x))
+#         solution_probs = T.sigmoid(self.output(x))
+#         return solution_probs
+#
+#     def REINFORCE(self, opt_init, env, context, baseline_reward=None, use_baseline=False):
+#         joint = {}
+#
+#         # Sample solution
+#         solution_probs = self.forward(context)
+#         m = Bernoulli(solution_probs)
+#         solution = m.sample().detach()
+#
+#         # Find the joint probability
+#         joint[0] = T.ones(1)
+#         for i in solution:
+#             if solution[i] == 0:
+#                 joint[i] = joint[i-1] * (1-solution_probs[i])
+#             elif solution[i] == 1:
+#                 joint[i] = joint[i-1] * solution_probs[i]
+#
+#         # Get reward from the environment
+#         reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+#         if use_baseline:
+#             loss_init = -log_prob * (reward - baseline_reward.clone().detach())
+#         else:
+#             loss_init = -log_prob * reward
+#         print("Reward: {}".format(reward))
+#
+#         loss_init = -joint[i] * reward
+#         print("Reward: {}".format(reward))
+#
+#         # Update the initialisation policy
+#         opt_init.zero_grad()
+#         loss_init.backward()
+#         opt_init.step()
+#
+#         # Update the baseline
+#         if use_baseline:
+#             loss_baseline_fn = T.nn.MSELoss()
+#             loss_baseline = loss_baseline_fn(baseline_reward, reward)
+#             opt_base.zero_grad()
+#             loss_baseline.backward()
+#             opt_base.step()
+#
+#         return reward, loss_init
 
 
 class RNNInitialisationPolicy(nn.Module):
@@ -188,5 +190,5 @@ class Baseline(nn.Module):
         return out
 
 
-if __name__ == "__main__":
-    # pass
+# if __name__ == "__main__":
+#     pass
