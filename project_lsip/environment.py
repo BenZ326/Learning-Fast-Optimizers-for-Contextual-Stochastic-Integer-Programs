@@ -1,7 +1,7 @@
 # An abstract class of Env
 from Model_KS import KS_MIP
 import numpy as np
-from base_line_alg import  extensive
+from base_line_alg import extensive
 
 
 class Env:
@@ -35,15 +35,17 @@ class Env_KS(Env):
     N_w: the number of scenarios
     """
 
-    def __init__(self, instance, N_w):
+    def __init__(self, instance, N_w, TIME_LIMIT=20):
         Env.__init__(self)
         self.instance = instance
         self.N_w = N_w
         self._action_ex = None
+        # Time limit for the SCIP solver
+        self.TIME_LIMIT = TIME_LIMIT
 
     def extensive_form(self):
-        ex_model = extensive(self.instance,self.N_w)
-        ex_model.solve(20)
+        ex_model = extensive(self.instance, self.N_w)
+        ex_model.solve(self.TIME_LIMIT)
         self._action_ex = ex_model.solution
         return ex_model.solution, ex_model.opt_obj, ex_model.gap
 
