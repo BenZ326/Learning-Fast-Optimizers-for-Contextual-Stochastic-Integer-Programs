@@ -116,38 +116,42 @@ class NNInitialisationPolicy(nn.Module):
         self.output = nn.Linear(self.dim_hidden, self.dim_problem)
 
     def forward(self, context):
+        p_val = dict()
+        p_val[0] = 1
         context = T.from_numpy(context).float()
 
+        # Evaluate the p(y_i = 1 | x). We directly try to predict the individual
+        # probabilities of each bit in the solution. Note that we needs to make
+        # independence assumption between the bits of solution in this approach.
         x = F.relu(self.linear_1(context))
         x = F.relu(self.linear_2(x))
         solution_probs = T.sigmoid(self.output(x))
-        return solution_probs
 
-    def REINFORCE(self, opt_init, env, context, baseline_reward=None, use_baseline=False):
-        joint = {}
-        print("Inside reinforce")
         # Sample solution
-        solution_probs = self.forward(context)
         m = Bernoulli(solution_probs)
         solution = m.sample().detach()
 
         # Find the joint probability
-        joint[0] = T.ones(1)
         for i in range(len(solution)):
-            if solution[i].item() == 0:
-                joint[i+1] = joint[i] * (1-solution_probs[i])
-            elif solution[i].item() == 1:
-                joint[i+1] = joint[i] * solution_probs[i]
+            p_val[i+1] = p_val[i] * \
+                T.pow(solution_probs[i], solution[i].item()) * \
+                T.pow(1 - solution_probs[i], 1-solution[i].item())
+
+        return solution, T.log(p_val[i+1])
+
+    def REINFORCE(self, opt_init, env, context, baseline_reward=None, use_baseline=False):
+        print("Inside reinforce")
+        solution, log_prob = self.forward(context)
 
         # Get reward from the environment
         reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
         # i+1th element will hold the joint probability of the sampled
         # solution
         if use_baseline:
-            loss_init = -T.log(joint[i+1]) * \
+            loss_init = -log_prob * \
                 (reward - baseline_reward.clone().detach())
         else:
-            loss_init = -T.log(joint[i+1]) * reward
+            loss_init = -log_prob * reward
 
         print("Reward: {}".format(reward))
 

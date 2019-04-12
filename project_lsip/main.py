@@ -102,12 +102,7 @@ def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random, eval
         ev_scip.append(reward_scip)
 
         # Solve instance using LM solver
-        if args.init_model == STR["NADE"] or args.init_model == STR["LSTM"]:
-            solution, _ = model.forward(context)
-        elif args.init_model == STR["FFNN"]:
-            solution_probs = model.forward(context)
-            m = Bernoulli(solution_probs)
-            solution = m.sample().detach()
+        solution, _ = model.forward(context)
 
         reward_policy = env.step(solution.numpy().reshape(-1))[0]
         ev_policy.append(reward_policy)
