@@ -166,8 +166,6 @@ class NNInitialisationPolicy(nn.Module):
 class LSTMInitialisationPolicy(nn.Module):
     def __init__(self, dim_problem, dim_context, dim_hidden):
         super(LSTMInitialisationPolicy, self).__init__()
-        # Initialization const
-        self.INIT = 0.01
         # Dimension of the variable vector
         self.dim_problem = dim_problem
         # Dimension of the context vector
@@ -175,74 +173,59 @@ class LSTMInitialisationPolicy(nn.Module):
         # Dimension of the hidden_vector
         self.dim_hidden = dim_hidden
         self.dim_lstm_in = 1
+        self.seq_len = 1
+        self.batch_size = 1
+        self.num_layers = 2
 
+        # Initialise layers
         self.linear_1 = nn.Linear(self.dim_context, self.dim_lstm_in)
+        self.lstm_cell = nn.LSTM(
+            self.dim_lstm_in, self.dim_hidden, self.num_layers)
+        self.linear_2 = nn.Linear(self.dim_hidden, 1)
 
-        self.W_f = nn.Linear(
-            self.dim_hidden + self.dim_lstm_in, self.dim_hidden)
-
-        self.W_i = nn.Linear(self.dim_hidden +
-                             self.dim_lstm_in, self.dim_hidden)
-
-        self.W_c = nn.Linear(self.dim_hidden +
-                             self.dim_lstm_in, self.dim_hidden)
-
-        self.W_o = nn.Linear(self.dim_hidden +
-                             self.dim_lstm_in, self.dim_lstm_in)
-
-    def forward(self, context, h=None, c=None):
+    def forward(self, context):
         context = T.from_numpy(context).float()
-        # Store the graph of LSTM in the forward pass
-        _f = {}
-        _i = {}
-        _c = {}
-        __c = {}
-        _h = {}
-        _o = {}
-        # Store input and joint probabilities
-        x = {}
-        p_val = {}
-        p_val[0] = 1
+        # Store the joint probability of the solution
+        p_val = dict()
+        # Store the probability of getting one at each time step
+        p_dist_1 = dict()
+        h_dict = dict()
+        c_dict = dict()
+        # Inputs to LSTM cell at each time step
+        x_dict = dict()
         solution = []
 
-        if h == None and c == None:
-            _h[-1] = T.Tensor(self.dim_hidden)
-            _c[-1] = T.zeros(self.dim_hidden)
+        # Initialise
+        # Hidden state and cell state dimensions required by LSTM
+        # (num_layers * num_directions, batch, hidden_size)
+        h_dict[0] = T.zeros(self.num_layers, self.batch_size, self.dim_hidden)
+        c_dict[0] = T.zeros(self.num_layers, self.batch_size, self.dim_hidden)
+        p_val[0] = 1
 
-            # Convert context to 1x1
-        x[0] = self.linear_1(context)
+        # Input required by LSTM cell: (seq_len, batch, input_size)
+        x_dict[0] = T.Tensor(self.seq_len, self.batch_size, self.dim_lstm_in)
+        x_dict[0][0][0] = self.linear_1(context)
+
+        # Recurse and find probability at each time step for a given bit.
+        # Sample from it to generate output for the next time step
         for t in range(self.dim_problem):
-            concat_input = T.cat((_h[t-1], x[t]), 0)
+            output, (h_dict[t+1], c_dict[t+1]) = self.lstm_cell(x_dict[t],
+                                                                (h_dict[t], c_dict[t]))
+            p_dist_1[t] = T.sigmoid(self.linear_2(output))
 
-            # Forget
-            _f[t] = T.sigmoid(self.W_f(concat_input))
-
-            # Input
-            _i[t] = T.sigmoid(self.W_i(concat_input))
-
-            # New information to choose from
-            __c[t] = T.tanh(self.W_c(concat_input))
-
-            # New cell state. Forget from the past state and add from
-            # the current state to create the new cell state
-            _c[t] = _f[t] * _c[t-1] + _i[t] * __c[t]
-
-            # Output
-            _o[t] = T.sigmoid(self.W_o(concat_input))
-
-            # Compute hidden state for the next time step
-            _h[t] = _o[t] * T.tanh(_c[t])
-
-            # Sample the t^th bit of the solution based on _o[t]
+            # Sample the ith bit of the solution based on p_dist[i]
             solution.append(T.distributions.Bernoulli(
-                _o[t].clone().detach().unsqueeze(0)).sample())
-            # Building input on the fly
-            x[t+1] = solution[-1][0].clone().detach()
+                p_dist_1[t].clone().detach().unsqueeze(0)).sample())
 
             # Update the joint probability
             p_val[t+1] = p_val[t] * \
-                T.pow(_o[t], solution[t][0]) * \
-                T.pow(1 - _o[t], 1-solution[t][0])
+                T.pow(p_dist_1[t], solution[t][0]) * \
+                T.pow(1 - p_dist_1[t], 1-solution[t][0])
+
+            # Update the input for the next time step
+            x_dict[t+1] = T.Tensor(self.seq_len,
+                                   self.batch_size, self.dim_lstm_in)
+            x_dict[t+1][0][0] = solution[-1][0].item()
 
         solution = T.stack(solution)
         return solution, T.log(p_val[t+1])
