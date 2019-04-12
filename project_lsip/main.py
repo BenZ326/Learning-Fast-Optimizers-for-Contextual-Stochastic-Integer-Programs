@@ -1,10 +1,12 @@
 from environment import Env_KS
 from instance import instance_generator
-from initialisation_policy import NADEInitializationPolicy
 from initialisation_policy import NNInitialisationPolicy
+from initialisation_policy import LSTMInitialisationPolicy
+from initialisation_policy import NADEInitializationPolicy
 from initialisation_policy import Baseline
 
 import torch as T
+from torch.distributions.bernoulli import Bernoulli
 import argparse
 import numpy as np
 
@@ -25,6 +27,7 @@ DEFAULT["USE_BASELINE"] = False
 STR = {}
 STR["NADE"] = "NADE"
 STR["FFNN"] = "FFNN"
+STR["LSTM"] = "LSTM"
 
 N_w = 200
 
@@ -78,8 +81,7 @@ def update_baseline_model(loss_fn, y_hat, y, optimizer):
     optimizer.step()
 
 
-
-def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random,eval_nbr,  ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
+def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random, eval_nbr,  ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
     """
     The evaulation function to compare the gap between initialization policy and scip solver
     policy: the policy
@@ -91,23 +93,33 @@ def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random,eval_
     num_rl_better = 0
     model.eval()
     for i in range(TEST_INSTANCES):
+        # Solve instance using SCIP
         instance = generator.generate_instance()
-
         context = instance.get_context()
         env = Env_KS(instance, N_w)
         _, reward_scip, scip_gap = env.extensive_form()
         env_gap.append(scip_gap)
         ev_scip.append(reward_scip)
-        solution, _ = model.forward(context)
+
+        # Solve instance using LM solver
+        if args.init_model == STR["NADE"] or args.init_model == STR["LSTM"]:
+            solution, _ = model.forward(context)
+        elif args.init_model == STR["FFNN"]:
+            solution_probs = model.forward(context)
+            m = Bernoulli(solution_probs)
+            solution = m.sample().detach()
+
         reward_policy = env.step(solution.numpy().reshape(-1))[0]
-        # randomly generate binary vector
+        ev_policy.append(reward_policy)
+
+        # Generate random vectors to compare the result
         random_solution = np.random.randint(
             0, 2, size=args.dim_problem).reshape(-1)
         reward_random = env.step(random_solution)[0]
         ev_random.append(reward_random)
-        ev_policy.append(reward_policy)
-        ev_scip.append(reward_scip)
-        ev_policy.append(reward_policy)
+
+        # Calculate stats about performance. How close we are to the
+        # scip
         square_dist += (reward_scip - reward_policy) ** 2
         relative_dist += (reward_scip - reward_policy) / reward_scip
         print("reward got by scip is {}".format(reward_scip))
@@ -115,6 +127,7 @@ def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random,eval_
         print("reward got by random is {}".format(reward_random))
         if reward_scip <= reward_policy:
             num_rl_better += 1
+
     eval_sqdist.append(square_dist / TEST_INSTANCES)
     eval_rp.append(relative_dist / TEST_INSTANCES)
     eval_nbr.append(num_rl_better)
@@ -139,7 +152,11 @@ def train(args):
         # Use FFNN as initialisation policy
         init_policy = NNInitialisationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
-        pass
+    elif args.init_model == STR["LSTM"]:
+        # Use FFNN as initialisation policy
+        init_policy = LSTMInitialisationPolicy(
+            args.dim_problem, args.dim_context, args.dim_hidden)
+
     init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
 
     # Initialize baseline if required
@@ -187,7 +204,7 @@ def train(args):
             np.save("ev_scip.npy", ev_scip)
             np.save("ev_policy", ev_policy)
             np.save("env_gap", env_gap)
-            np.save("eval_sqdist.npy",eval_sqdist)
+            np.save("eval_sqdist.npy", eval_sqdist)
             np.save("eval_rp.npy", eval_rp)
             np.save("eval_nbr.npy", eval_nbr)
             np.save("reward.npy", reward)
