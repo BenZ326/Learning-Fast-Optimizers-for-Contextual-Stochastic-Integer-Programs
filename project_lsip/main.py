@@ -9,6 +9,7 @@ import torch as T
 from torch.distributions.bernoulli import Bernoulli
 import argparse
 import numpy as np
+import os
 
 ##################################################################
 #                       DEFAULT PARAMETERS                       #
@@ -24,12 +25,18 @@ DEFAULT["INIT_LR_RATE"] = 1e-4
 DEFAULT["NO_OF_SCENARIOS"] = 200
 DEFAULT["USE_BASELINE"] = False
 
+
 STR = {}
 STR["NADE"] = "NADE"
 STR["FFNN"] = "FFNN"
 STR["LSTM"] = "LSTM"
 
 N_w = 200
+
+# folders
+DEFAULT["DATA_NADE"] = "data_nade/"
+DEFAULT["DATA_NN"] = "data_nn/"
+DEFAULT["DATA_LSTM"] = "data_lstm/"
 
 
 def parse_args():
@@ -55,6 +62,14 @@ def parse_args():
                         default=DEFAULT["DIM_HIDDEN"])
     parser.add_argument("--dim_problem", type=int,
                         default=DEFAULT["DIM_PROBLEM"])
+    parser.add_argument("--path_nade", type=str,
+                        default=DEFAULT["DATA_NADE"])
+
+    parser.add_argument("--path_nn", type=str,
+                        default=DEFAULT["DATA_NN"])
+    parser.add_argument("--path_lstm", type=str,
+                        default=DEFAULT["DATA_NADE"])
+
     args = parser.parse_args()
     if args.is_penalty_same:
         # The dimension of the context will be 2 more than dimension of problem.
@@ -81,7 +96,7 @@ def update_baseline_model(loss_fn, y_hat, y, optimizer):
     optimizer.step()
 
 
-def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random, eval_nbr,  ev_scip, ev_policy, env_gap, TEST_INSTANCES=10):
+def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random, eval_nbr,  ev_scip, ev_policy, ev_gap, TEST_INSTANCES=10):
     """
     The evaulation function to compare the gap between initialization policy and scip solver
     policy: the policy
@@ -98,7 +113,7 @@ def evaluate_model(args, model, generator, eval_sqdist, eval_rp, ev_random, eval
         context = instance.get_context()
         env = Env_KS(instance, N_w)
         _, reward_scip, scip_gap = env.extensive_form()
-        env_gap.append(scip_gap)
+        ev_gap.append(scip_gap)
         ev_scip.append(reward_scip)
 
         # Solve instance using LM solver
@@ -139,24 +154,28 @@ def train(args):
     loss_init = []
     ev_scip = []
     ev_policy = []
-    env_gap = []
+    ev_gap = []
     ev_random = []
     generator = instance_generator(args.problem)
-
+    folder_path = None
+    name_base_line = ""
     # Select initialisation policy
     if args.init_model == STR["NADE"]:
         # Use NADE as initialisation policy
         init_policy = NADEInitializationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
+        folder_path = args.path_nade
     elif args.init_model == STR["FFNN"]:
         # Use FFNN as initialisation policy
         init_policy = NNInitialisationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
+        folder_path = args.path_nn
     elif args.init_model == STR["LSTM"]:
         # Use FFNN as initialisation policy
         init_policy = LSTMInitialisationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
-
+        folder_path = args.path_lstm
+    os.mkdir(folder_path)
     init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
 
     # Initialize baseline if required
@@ -164,7 +183,7 @@ def train(args):
         baseline_net = Baseline(args.dim_context, args.dim_hidden)
         opt_base = T.optim.Adam(baseline_net.parameters(), lr=1e-4)
         loss_base_fn = T.nn.MSELoss()
-
+        name_base_line = "base_line"
     eval_sqdist = []
     eval_rp = []
     eval_nbr = []     # record number of RL better
@@ -173,7 +192,7 @@ def train(args):
     for epoch in range(1, args.init_epochs+1):
         # if epoch == 1:
         #     evaluate_model(args, init_policy, generator, eval_sqdist,
-        #                    eval_rp, ev_random, eval_nbr, ev_scip, ev_policy, env_gap)
+        #                    eval_rp, ev_random, eval_nbr, ev_scip, ev_policy, ev_gap)
         print("******************************************************")
         print("Epoch : {}".format(epoch))
         # Generate instance and environment
@@ -199,18 +218,36 @@ def train(args):
         if epoch % 50 == 0:
             # Save the data file
             evaluate_model(args, init_policy, generator, eval_sqdist, eval_rp, ev_random, eval_nbr, ev_scip, ev_policy,
-                           env_gap)
-            np.save("ev_random.npy", ev_random)
-            np.save("ev_scip.npy", ev_scip)
-            np.save("ev_policy", ev_policy)
-            np.save("env_gap", env_gap)
-            np.save("eval_sqdist.npy", eval_sqdist)
-            np.save("eval_rp.npy", eval_rp)
-            np.save("eval_nbr.npy", eval_nbr)
-            np.save("reward.npy", reward)
-            np.save("loss_init.npy", loss_init)
-            T.save(init_policy.state_dict(), "init_policy")
+                           ev_gap)
+            folder_path = args.path_nade
+            if args.use_baseline:
+                folder_path = args.path_nade_baseline
+            np.save(file_name_prifix(folder_path,name_base_line)+"ev_random.npy", ev_random)
+            """
+            Explanation of statistics variables: 
+            All the following variables are only associated with "evaluation":
+            ev_scip: a list that stores the optimal objective values returned by SCIP
+            ev_policy: a list that stores the values returned by the initialization policy
+            ev_gap: a list that stores MIP gap when SCIP is terminated
+            eval_sqdist: a list that stores square distance between scip solver's result and the policy's
+            eval_rp: a list that stores relative percentages
+            eval_nbr: a list that stores how many times a the policy works better than SCIP
+            ------------------------------------------------------------------------------
+            reward: a list that stores reward return by the initialization policy at each epoch
+            loss_init: a list that stores loss at each epoch
+            """
+            np.save(folder_path+"ev_scip.npy", ev_scip)
+            np.save(folder_path+"ev_policy", ev_policy)
+            np.save(folder_path+"ev_gap", ev_gap)
+            np.save(folder_path+"eval_sqdist.npy", eval_sqdist)
+            np.save(folder_path+"eval_rp.npy", eval_rp)
+            np.save(folder_path+"eval_nbr.npy", eval_nbr)
+            np.save(folder_path+"reward.npy", reward)
+            np.save(folder_path+"loss_init.npy", loss_init)
+            T.save(init_policy.state_dict(), folder_path+"init_policy")
 
+def file_name_prifix(folder, base_line):
+    return folder+base_line+"_"
 
 if __name__ == "__main__":
     args = parse_args()
