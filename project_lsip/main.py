@@ -5,6 +5,7 @@ from initialisation_policy import LSTMInitialisationPolicy
 from initialisation_policy import NADEInitializationPolicy
 from initialisation_policy import Baseline
 from state import state
+from local_move_policy import A2CLocalMovePolicy
 
 
 import torch as T
@@ -26,8 +27,10 @@ DEFAULT["DIM_HIDDEN"] = 10
 DEFAULT["DIM_PROBLEM"] = 25
 DEFAULT["INIT_MODEL"] = "NADE"
 DEFAULT["INIT_LR_RATE"] = 1e-4
-DEFAULT["NO_OF_SCENARIOS"] = 200
+DEFAULT["NUM_OF_SCENARIOS"] = 200
 DEFAULT["USE_BASELINE"] = False
+DEFAULT["WINDOW_SIZE"] = 5
+DEFAULT["NUM_OF_SCENARIOS_IN_STATE"] = 40
 
 
 STR = {}
@@ -59,7 +62,7 @@ def parse_args():
     parser.add_argument('--is_penalty_same', type=bool,
                         default=DEFAULT["IS_PENALTY_SAME"])
     parser.add_argument("--num_of_scenarios", type=int,
-                        default=DEFAULT["NO_OF_SCENARIOS"])
+                        default=DEFAULT["NUM_OF_SCENARIOS"])
 
     parser.add_argument("--problem", type=str, default=DEFAULT["PROBLEM"])
     parser.add_argument("--dim_hidden", type=int,
@@ -73,6 +76,11 @@ def parse_args():
                         default=DEFAULT["DATA_NN"])
     parser.add_argument("--path_lstm", type=str,
                         default=DEFAULT["DATA_NADE"])
+
+    parser.add_argument("--window_size", type=int,
+                        default=DEFAULT["WINDOW_SIZE"])
+    parser.add_argument("--num_of_scenarios_in_state", type=int,
+                        default=DEFAULT["NUM_OF_SCENARIOS_IN_STATE"])
 
     args = parser.parse_args()
     if args.is_penalty_same:
@@ -266,7 +274,7 @@ def train(args):
 
     generator = instance_generator(args.problem)
 
-    # Select Initialisation policy and set its optimizer
+    # Initialise Initialisation policy and set its optimizer
     init_policy = select_initialization_policy(args)
     init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
 
@@ -276,6 +284,9 @@ def train(args):
         opt_base = T.optim.Adam(baseline_net.parameters(), lr=1e-4)
         loss_base_fn = T.nn.MSELoss()
 
+    # Initialise local move policy
+    local_move_policy = A2CLocalMovePolicy(args)
+
     # Train
     for epoch in range(1, args.init_epochs+1):
         print("******************************************************")
@@ -283,20 +294,22 @@ def train(args):
         # Generate instance and environment
         instance = generator.generate_instance()
         context = instance.get_context()
-        env = Env_KS(instance, DEFAULT["NO_OF_SCENARIOS"])
+        env = Env_KS(instance, args.num_of_scenarios)
 
         # Learn using REINFORCE
         # If using baseline, update the baseline net
-        if args.use_baseline:
-            baseline_reward = baseline_net.forward(context)
-            reward_, loss_init_ = init_policy.REINFORCE(
-                init_opt, env, context, baseline_reward, True)
-            update_baseline_model(
-                loss_base_fn, baseline_reward, reward_, opt_base)
-        # Without using baseline
-        else:
-            reward_, loss_init_ = init_policy.REINFORCE(
-                init_opt, env, context)
+        # if args.use_baseline:
+        #     baseline_reward = baseline_net.forward(context)
+        #     reward_, loss_init_ = init_policy.REINFORCE(
+        #         init_opt, env, context, baseline_reward, True)
+        #     update_baseline_model(
+        #         loss_base_fn, baseline_reward, reward_, opt_base)
+        # # Without using baseline
+        # else:
+        #     reward_, loss_init_ = init_policy.REINFORCE(
+        #         init_opt, env, context)
+
+        local_move_policy.train(env)
 
         reward.append(reward_.item())
         loss_init.append(loss_init_.item())

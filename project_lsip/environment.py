@@ -8,6 +8,7 @@ from state import state
 
 Number_Sampled_Scenarios = 40
 
+
 class Env:
     def __init__(self):
         pass
@@ -31,7 +32,7 @@ class Env:
 class Env_KS(Env):
     """
     Arguments
-    ---------        
+    ---------
     instance: a problem instance
 
     Returns
@@ -39,8 +40,9 @@ class Env_KS(Env):
     N_w: the number of scenarios
     """
 
-    def __init__(self, instance, N_w, TIME_LIMIT=20):
+    def __init__(self, args, instance, N_w, TIME_LIMIT=20):
         Env.__init__(self)
+        self.args = args
         self.instance = instance
         self.N_w = N_w
         self._action_ex = None
@@ -53,7 +55,7 @@ class Env_KS(Env):
         self._action_ex = ex_model.solution
         return ex_model.solution, ex_model.opt_obj, ex_model.gap
 
-    def step(self,state,sol,pos,flip = True):
+    def step(self, state=None, sol=None, pos=None, flip=False):
         """
         Arguments
         ---------
@@ -64,25 +66,32 @@ class Env_KS(Env):
         return value: reward
         """
         if flip:
-           new_sol = copy.deepcopy(state.get_sol())
-           if new_sol[pos] == 0:
-               new_sol[pos] = 1
-           else:
-               new_sol[pos] = 0
-           new_obj, scenarios_vec = self.evaluate(new_sol, True)
-           assert(state.get_obj() == None)
-           reward = new_obj - state.get_obj()
-           refined_scenarios = self.refine_scenarios(scenarios_vec)
-           state.update((new_sol,new_obj), refined_scenarios)
-           return reward, state
+            new_sol = copy.deepcopy(state.get_sol())
+            if new_sol[pos] == 0:
+                new_sol[pos] = 1
+            else:
+                new_sol[pos] = 0
+            new_obj, scenarios_vec = self.evaluate(new_sol, True)
+            assert(state.get_obj() == None)
+            reward = new_obj - state.get_obj()
+            refined_scenarios = self.refine_scenarios(scenarios_vec)
+            state.update((new_sol, new_obj), refined_scenarios)
+            return reward, state.get_state()
         else:
-            obj_value,scenarios_vec = self.evaluate(sol, True)
-            state_init = state(tuple([sol,obj_value]),self.instance.get_context())
-            return np.array([obj_value]).reshape(-1), state_init
-    """"
-    if memory is true, it means we need to store the scenarios and sampled scenarios
-    """
-    def evaluate(self, sol, memory = False):
+            obj_value, scenarios_vec = self.evaluate(sol, True)
+            refined_scenarios = self.refine_scenarios(scenarios_vec)
+
+            state_init = state(args, tuple([sol, obj_value]),
+                               self.instance.get_context())
+            state_init.update((sol, obj_value), refined_scenarios)
+
+            return np.array([obj_value]).reshape(-1), state.get_state()
+
+    def evaluate(self, sol, memory=False):
+        """
+        if memory is true, it means we need to store the scenarios and sampled scenarios
+        """
+
         scenario_vec = []
         f_x = sol @ self.instance.get_values()
         f_y = 0  # the expected cost of second stage
@@ -101,10 +110,11 @@ class Env_KS(Env):
             f_y += model.query_opt_obj() / self.N_w
         return f_x + f_y, scenario_vec
 
-    """"
-    To make a difference in the function name, we call refine_scenarios as the function to uniformly sample a subset of scenarios
-    """
     def refine_scenarios(self, scenarios_vec):
+        """
+        To make a difference in the function name, we call refine_scenarios as the function to uniformly sample a subset of scenarios
+        """
+
         refined = []
         length_vec = len(scenarios_vec)
         while len(refined) <= Number_Sampled_Scenarios:
