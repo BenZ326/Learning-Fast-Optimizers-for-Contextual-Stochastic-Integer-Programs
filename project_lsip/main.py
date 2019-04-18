@@ -9,6 +9,7 @@ import torch as T
 from torch.distributions.bernoulli import Bernoulli
 import argparse
 import numpy as np
+import os
 
 ##################################################################
 #                       DEFAULT PARAMETERS                       #
@@ -195,16 +196,29 @@ def train(args):
             # Save the data file
             evaluate_model(args, init_policy, generator, eval_sqdist, eval_rp, ev_random, eval_nbr, ev_scip, ev_policy,
                            env_gap)
-            np.save("ev_random.npy", ev_random)
-            np.save("ev_scip.npy", ev_scip)
-            np.save("ev_policy", ev_policy)
-            np.save("env_gap", env_gap)
-            np.save("eval_sqdist.npy", eval_sqdist)
-            np.save("eval_rp.npy", eval_rp)
-            np.save("eval_nbr.npy", eval_nbr)
-            np.save("reward.npy", reward)
-            np.save("loss_init.npy", loss_init)
-            T.save(init_policy.state_dict(), "init_policy")
+            if not os.path.exists("stats"):
+                os.mkdir("stats")
+
+            prefix = "_".join(
+                [args.init_model,
+                 "baseline="+str(args.use_baseline),
+                 "lr="+str(args.init_lr_rate),
+                 "epochs="+str(args.init_epochs)])
+
+            if not os.path.exists(os.path.join("stats", prefix)):
+                os.mkdir(os.path.join("stats", prefix))
+            np.save(os.path.join("stats", prefix, "ev_random.npy"), ev_random)
+            np.save(os.path.join("stats", prefix, "ev_scip.npy"), ev_scip)
+            np.save(os.path.join("stats", prefix, "ev_policy"), ev_policy)
+            np.save(os.path.join("stats", prefix, "env_gap"), env_gap)
+            np.save(os.path.join("stats", prefix,
+                                 "eval_sqdist.npy"), eval_sqdist)
+            np.save(os.path.join("stats", prefix, "eval_rp.npy"), eval_rp)
+            np.save(os.path.join("stats", prefix, "eval_nbr.npy"), eval_nbr)
+            np.save(os.path.join("stats", prefix, "reward.npy"), reward)
+            np.save(os.path.join("stats", prefix, "loss_init.npy"), loss_init)
+            T.save(init_policy.state_dict(), os.path.join(
+                "stats", prefix, "init_policy"))
 
 
 if __name__ == "__main__":
