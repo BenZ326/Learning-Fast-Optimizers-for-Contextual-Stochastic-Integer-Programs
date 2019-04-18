@@ -4,6 +4,8 @@ from initialisation_policy import NNInitialisationPolicy
 from initialisation_policy import LSTMInitialisationPolicy
 from initialisation_policy import NADEInitializationPolicy
 from initialisation_policy import Baseline
+from state import state
+
 
 import torch as T
 from torch.distributions.bernoulli import Bernoulli

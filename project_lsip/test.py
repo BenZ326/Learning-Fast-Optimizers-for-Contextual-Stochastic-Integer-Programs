@@ -3,7 +3,7 @@ from instance import instance_generator
 import numpy as np
 from environment import Env_KS
 from base_line_alg import  extensive
-
+from state import state
 PROBLEM = "ks"
 
 # create a knapsack instance
@@ -13,7 +13,15 @@ ks = generator.generate_instance()
 # get items values
 value = ks.get_values()
 x_star = np.zeros(len(value))
+sol = np.zeros(25)
+state = state(sol,ks.get_context())
+env = Env_KS(ks,200)
+reward= env.step(state,sol,1, True)
 
+
+
+
+""""
 # sample a scenario and return a weight vecotr
 weight = ks.sample_scenarios()
 # get the capacity of the knapsack
@@ -29,7 +37,7 @@ ex_alg.solve(100)
 # the second argument is the sampled weight
 
 
-""""
+
 ks_mip = KS_MIP(ks, x_star, weight)
 
 # solve the problem, it will return the status of the solver, it can be "optimal" , "unbounded", "infeasible"
