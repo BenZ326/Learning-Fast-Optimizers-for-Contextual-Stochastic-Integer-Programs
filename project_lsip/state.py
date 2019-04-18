@@ -9,7 +9,7 @@ Problem_Sizes = 10
 class state:
 
     def __init__(self, init_sol, context_vec):
-        self._sol = tuple([init_sol,None])
+        self._sol = init_sol
         self._aggregation = np.zeros(Time_Step * Number_Sampled_Scenarios*(Problem_Sizes+1))
         self._context_vector = context_vec
 

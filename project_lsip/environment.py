@@ -70,19 +70,15 @@ class Env_KS(Env):
            else:
                new_sol[pos] = 0
            new_obj, scenarios_vec = self.evaluate(new_sol, True)
-           reward = None
-           if state.get_obj() == None:
-               old_sol =state.get_sol()
-               old_obj, _ = self.evaluate(old_sol)
-               reward = new_obj - old_obj
-           else:
-               reward = new_obj - state.get_obj()
+           assert(state.get_obj() == None)
+           reward = new_obj - state.get_obj()
            refined_scenarios = self.refine_scenarios(scenarios_vec)
            state.update((new_sol,new_obj), refined_scenarios)
-           return reward
+           return reward, state
         else:
-            obj_value,_ = self.evaluate(sol)
-            return np.array([obj_value]).reshape(-1)
+            obj_value,scenarios_vec = self.evaluate(sol, True)
+            state_init = state(tuple([sol,obj_value]),self.instance.get_context())
+            return np.array([obj_value]).reshape(-1), state_init
     """"
     if memory is true, it means we need to store the scenarios and sampled scenarios
     """

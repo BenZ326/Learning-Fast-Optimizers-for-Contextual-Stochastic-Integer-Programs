@@ -14,9 +14,8 @@ ks = generator.generate_instance()
 value = ks.get_values()
 x_star = np.zeros(len(value))
 sol = np.zeros(25)
-state = state(sol,ks.get_context())
 env = Env_KS(ks,200)
-reward= env.step(state,sol,1, True)
+reward, state = env.step(state,sol,1, False)
 
 
 
