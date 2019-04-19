@@ -4,6 +4,7 @@ import numpy as np
 from base_line_alg import extensive
 import numpy.random as rd
 import copy
+
 from state import state
 
 Number_Sampled_Scenarios = 40
@@ -21,6 +22,7 @@ class Env:
 
     def step(self, action):
         pass
+
 
 # Environment for two stage stochastic programming
 
@@ -53,7 +55,7 @@ class Env_KS(Env):
         ex_model = extensive(self.instance, self.N_w)
         ex_model.solve(self.TIME_LIMIT)
         self._action_ex = ex_model.solution
-        return ex_model.solution, ex_model.opt_obj, ex_model.gap
+        return ex_model.solution, ex_model.opt_obj, ex_model.gap, ex_model.best_sol_list
 
     def step(self, state=None, sol=None, pos=None, flip=False):
         """
@@ -72,7 +74,7 @@ class Env_KS(Env):
             else:
                 new_sol[pos] = 0
             new_obj, scenarios_vec = self.evaluate(new_sol, True)
-            assert(state.get_obj() == None)
+            assert (state.get_obj() == None)
             reward = new_obj - state.get_obj()
             refined_scenarios = self.refine_scenarios(scenarios_vec)
             state.update((new_sol, new_obj), refined_scenarios)

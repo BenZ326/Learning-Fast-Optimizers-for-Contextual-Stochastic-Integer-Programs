@@ -2,17 +2,22 @@ from Model_KS import KS_MIP
 from instance import instance_generator
 import numpy as np
 from environment import Env_KS
-from base_line_alg import  extensive
+from base_line_alg import extensive
 from state import state
+
 PROBLEM = "ks"
 
 # create a knapsack instance
 
 generator = instance_generator(PROBLEM)
 ks = generator.generate_instance()
+weights = ks.sample_scenarios()
 # get items values
-value = ks.get_values()
-x_star = np.zeros(len(value))
+env = Env_KS(ks, 100, 20)
+_, _, _, best_sol_list = env.extensive_form()
+print(best_sol_list)
+
+""""
 sol = np.zeros(25)
 env = Env_KS(ks,200)
 reward, state = env.step(state,sol,1, False)
@@ -20,7 +25,7 @@ reward, state = env.step(state,sol,1, False)
 
 
 
-""""
+
 # sample a scenario and return a weight vecotr
 weight = ks.sample_scenarios()
 # get the capacity of the knapsack

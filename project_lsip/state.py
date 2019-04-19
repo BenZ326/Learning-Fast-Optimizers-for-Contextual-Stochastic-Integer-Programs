@@ -17,11 +17,11 @@ class state:
         args : dict
             Dictionary containing command line arguments
         solution : list
-            # TODO
+            First-stage solution
         obj_value : float
-            # TODO
+            Objective value of the above solution
         context : list
-            # TODO
+            Context vector containing the description of an instance
         """
         self._solution = solution
         self._obj_value = obj_value
@@ -39,11 +39,11 @@ class state:
         a bit
 
         solution : list
-            # TODO
+            the new first-stage solution of popped out by the local move policy
         obj_value : list
-            # TODO
+            the objective value of the new solution
         latest_scenario_solution_and_slack : list
-            # TODO
+            the aggregated information retrieved from the environment at the current iteration
         """
         self._solution = solution
         self._obj_value = obj_value
@@ -52,8 +52,8 @@ class state:
         # time window
         self._scenario_solution_and_slack.extend(
             latest_scenario_solution_and_slack)
-        self._scenario_solution_and_slack = self._scenario_solution_and_slack[args.num_of_scenarios_in_state*(
-            args.dim_problem+1):]
+        self._scenario_solution_and_slack = self._scenario_solution_and_slack[args.num_of_scenarios_in_state * (
+            args.dim_problem + 1):]
 
     # Access private variable solution
     def get_solution(self):

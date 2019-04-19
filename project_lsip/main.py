@@ -196,7 +196,7 @@ def save_stats_and_model(args, init_policy, reward, loss_init, ev_scip, ev_polic
     eval_rp : list 
         a list that stores relative percentages
     eval_nbr : list
-        a list that stores how many times a the policy works better than SCIP    
+        a list that stores how many times the policy works better than SCIP
     """
 
     if not os.path.exists("stats"):
