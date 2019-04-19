@@ -85,7 +85,8 @@ class NADEInitializationPolicy(nn.Module):
         solution, log_prob = self.forward(context)
 
         # Get reward from the environment and calculate loss
-        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+        new_state, reward = env.step(solution=solution.numpy().reshape(-1))
+        reward = T.from_numpy(reward).float()
         if use_baseline:
             loss_init = -log_prob * (reward - baseline_reward.item())
         else:
@@ -97,7 +98,7 @@ class NADEInitializationPolicy(nn.Module):
         loss_init.backward()
         opt_init.step()
 
-        return reward, loss_init
+        return reward, loss_init, new_state
 
 
 class NNInitialisationPolicy(nn.Module):
@@ -144,7 +145,8 @@ class NNInitialisationPolicy(nn.Module):
         solution, log_prob = self.forward(context)
 
         # Get reward from the environment
-        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+        new_state, reward = env.step(solution=solution.numpy().reshape(-1))
+        reward = T.from_numpy(reward).float()
         # i+1th element will hold the joint probability of the sampled
         # solution
         if use_baseline:
@@ -160,7 +162,7 @@ class NNInitialisationPolicy(nn.Module):
         loss_init.backward()
         opt_init.step()
 
-        return reward, loss_init
+        return reward, loss_init, new_state
 
 
 class LSTMInitialisationPolicy(nn.Module):
@@ -234,7 +236,8 @@ class LSTMInitialisationPolicy(nn.Module):
         solution, log_prob = self.forward(context)
 
         # Get reward from the environment and calculate loss
-        reward = T.from_numpy(env.step(solution.numpy().reshape(-1))).float()
+        new_state, reward = env.step(solution=solution.numpy().reshape(-1))
+        reward = T.from_numpy(reward).float()
         if use_baseline:
             loss_init = -log_prob * (reward - baseline_reward.item())
         else:
@@ -246,7 +249,7 @@ class LSTMInitialisationPolicy(nn.Module):
         loss_init.backward()
         opt_init.step()
 
-        return reward, loss_init
+        return reward, loss_init, new_state
 
 
 class Baseline(nn.Module):

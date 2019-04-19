@@ -1,20 +1,17 @@
-from environment import Env_KS
-from instance import instance_generator
-from initialisation_policy import NNInitialisationPolicy
-from initialisation_policy import LSTMInitialisationPolicy
-from initialisation_policy import NADEInitializationPolicy
-from initialisation_policy import Baseline
-from state import state
-from local_move_policy import A2CLocalMovePolicy
+import argparse
+import hashlib
+import os
+import time
 
-
+import numpy as np
 import torch as T
 from torch.distributions.bernoulli import Bernoulli
-import numpy as np
-import argparse
-import os
-import hashlib
-import time
+
+from initialisation_policy import (Baseline, LSTMInitialisationPolicy,
+                                   NADEInitializationPolicy,
+                                   NNInitialisationPolicy)
+from instance import instance_generator
+from local_move_policy import A2CLocalMovePolicy
 
 ##################################################################
 #                       DEFAULT PARAMETERS                       #
@@ -256,6 +253,18 @@ def select_initialization_policy(args):
     return init_policy
 
 
+def create_environment(args, instance):
+    """
+    Create environment based on the problem definition
+    """
+
+    if args.problem == "ks":
+        from environment import EnvKnapsack
+        env = EnvKnapsack(args, instance)
+
+    return env
+
+
 def train(args):
     """
     Simultaneously train Initialisation Policy and Baseline
@@ -268,9 +277,9 @@ def train(args):
 
     """
     # Buffers to store statistics
-    reward, loss_init, ev_scip, ev_policy, ev_gap, ev_random, eval_sqdist,
-    eval_rp, eval_nbr = list(), list(), list(
-    ), list(), list(), list(), list(), list(), list()
+    reward, loss_init, ev_scip, ev_policy, ev_gap, ev_random, eval_sqdist,\
+        eval_rp, eval_nbr = list(), list(), list(
+        ), list(), list(), list(), list(), list(), list()
 
     generator = instance_generator(args.problem)
 
@@ -294,22 +303,23 @@ def train(args):
         # Generate instance and environment
         instance = generator.generate_instance()
         context = instance.get_context()
-        env = Env_KS(instance, args.num_of_scenarios)
+
+        env = create_environment(args, instance)
 
         # Learn using REINFORCE
         # If using baseline, update the baseline net
-        # if args.use_baseline:
-        #     baseline_reward = baseline_net.forward(context)
-        #     reward_, loss_init_ = init_policy.REINFORCE(
-        #         init_opt, env, context, baseline_reward, True)
-        #     update_baseline_model(
-        #         loss_base_fn, baseline_reward, reward_, opt_base)
-        # # Without using baseline
-        # else:
-        #     reward_, loss_init_ = init_policy.REINFORCE(
-        #         init_opt, env, context)
+        if args.use_baseline:
+            baseline_reward = baseline_net.forward(context)
+            reward_, loss_init_, start_state = init_policy.REINFORCE(
+                init_opt, env, context, baseline_reward, True)
+            update_baseline_model(
+                loss_base_fn, baseline_reward, reward_, opt_base)
+        # Without using baseline
+        else:
+            reward_, loss_init_, start_state = init_policy.REINFORCE(
+                init_opt, env, context)
 
-        local_move_policy.train(env)
+        local_move_policy.train(start_state, env)
 
         reward.append(reward_.item())
         loss_init.append(loss_init_.item())

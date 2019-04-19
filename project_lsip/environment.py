@@ -1,93 +1,116 @@
-# An abstract class of Env
-from Model_KS import KS_MIP
 import numpy as np
-from base_line_alg import extensive
 import numpy.random as rd
 import copy
 
-from state import state
+from State import State
+from Model_KS import KS_MIP
+from base_line_alg import extensive
 
-Number_Sampled_Scenarios = 40
 
+class Environment:
+    """
+    Abstract class for environment. Each specific environment 
+    must inherit this class and define the methods
+    """
 
-class Env:
     def __init__(self):
         pass
 
     def reset(self):
         pass
 
-    def seed(self, seed=None):
-        pass
-
     def step(self, action):
         pass
 
 
-# Environment for two stage stochastic programming
-
-#######################################################################
-# Authors: Xiangyi Zhang, Rahul Patel                                 #
-#######################################################################
-
-
-class Env_KS(Env):
+class EnvKnapsack(Environment):
     """
-    Arguments
-    ---------
-    instance: a problem instance
-
-    Returns
-    -------
-    N_w: the number of scenarios
+    Environment for the Knapsack problem
     """
 
-    def __init__(self, args, instance, N_w, TIME_LIMIT=20):
-        Env.__init__(self)
+    def __init__(self, args, instance, TIME_LIMIT=20):
+        """
+        Arguments
+        ---------
+        instance: a problem instance
+
+        Returns
+        -------
+        """
+
+        Environment().__init__()
         self.args = args
         self.instance = instance
-        self.N_w = N_w
         self._action_ex = None
         # Time limit for the SCIP solver
         self.TIME_LIMIT = TIME_LIMIT
 
     def extensive_form(self):
-        ex_model = extensive(self.instance, self.N_w)
+        ex_model = extensive(self.instance, self.args.num_of_scenarios)
         ex_model.solve(self.TIME_LIMIT)
         self._action_ex = ex_model.solution
         return ex_model.solution, ex_model.opt_obj, ex_model.gap, ex_model.best_sol_list
 
-    def step(self, state=None, sol=None, pos=None, flip=False):
+    def step(self, solution=None, obj_value=None, state=None, position=None, flip=False):
         """
+        Evaluate an action taken by the agent
+
         Arguments
         ---------
-        action: a solution popped out by NADE
+        solution :
+            #TODO
+        obj_value :
+            #TODO
+        state : 
+            #TODO
+        position : 
+            #TODO
+        flip : 
+            #TODO
 
         Returns
         -------
         return value: reward
         """
+        # Called from local move policy
         if flip:
-            new_sol = copy.deepcopy(state.get_sol())
-            if new_sol[pos] == 0:
-                new_sol[pos] = 1
-            else:
-                new_sol[pos] = 0
-            new_obj, scenarios_vec = self.evaluate(new_sol, True)
-            assert (state.get_obj() == None)
-            reward = new_obj - state.get_obj()
-            refined_scenarios = self.refine_scenarios(scenarios_vec)
-            state.update((new_sol, new_obj), refined_scenarios)
-            return reward, state.get_state()
+            # Generate new solution
+            new_solution = copy.deepcopy(state.get_solution())
+            # Check whether we are required to make an update
+            if position < self.args.dim_problem:
+                if new_solution[position] == 0:
+                    new_solution[position] = 1
+                else:
+                    new_solution[position] = 0
+
+            # Evaluate the new solution and to get its objective value and
+            # scenario solutions & slack
+            new_obj_value, all_scenarios_solution_and_slack = self.evaluate(
+                new_solution, True)
+
+            # Reward for the local move policy, which is nothing but the difference in
+            # the objective value corresponding to the new and old solutions
+            reward = new_obj_value - state.get_obj_value()
+
+            # TRICK: Randomly sample a subset of scenarios to form the new state
+            # We cannot consider all the scenarios as it will blow up the state size
+            scenarios_for_state_definition = self.sample_scenarios_for_state_definition(
+                all_scenarios_solution_and_slack)
+            state.update(new_solution, new_obj_value,
+                         scenarios_for_state_definition)
+
+            return state, reward
+
+        # Called from Initialisation Policy
         else:
-            obj_value, scenarios_vec = self.evaluate(sol, True)
-            refined_scenarios = self.refine_scenarios(scenarios_vec)
+            obj_value, scenarios_vec = self.evaluate(solution, memory=True)
+            scenarios_for_state_definition = self.sample_scenarios_for_state_definition(
+                scenarios_vec)
 
-            state_init = state(args, tuple([sol, obj_value]),
-                               self.instance.get_context())
-            state_init.update((sol, obj_value), refined_scenarios)
+            state = State(self.args, solution, obj_value,
+                          self.instance.get_context(), scenarios_for_state_definition)
 
-            return np.array([obj_value]).reshape(-1), state.get_state()
+            return state, np.array([obj_value]).reshape(-1)
 
     def evaluate(self, sol, memory=False):
         """
@@ -97,7 +120,7 @@ class Env_KS(Env):
         scenario_vec = []
         f_x = sol @ self.instance.get_values()
         f_y = 0  # the expected cost of second stage
-        for scenario in range(self.N_w):
+        for scenario in range(self.args.num_of_scenarios):
             model = None
             while True:
                 weights = self.instance.sample_scenarios()
@@ -109,17 +132,17 @@ class Env_KS(Env):
                         tmp_vec.append(model.slack)
                         scenario_vec.append(tmp_vec)
                     break
-            f_y += model.query_opt_obj() / self.N_w
+            f_y += model.query_opt_obj() / self.args.num_of_scenarios
         return f_x + f_y, scenario_vec
 
-    def refine_scenarios(self, scenarios_vec):
+    def sample_scenarios_for_state_definition(self, scenarios_vec):
         """
-        To make a difference in the function name, we call refine_scenarios as the function to uniformly sample a subset of scenarios
+        Select a subset of scenarios among all the scenarios considered to evaluate the expectation
         """
 
         refined = []
         length_vec = len(scenarios_vec)
-        while len(refined) <= Number_Sampled_Scenarios:
+        while len(refined) < self.args.num_of_scenarios_in_state:
             idx = rd.randint(0, length_vec)
             if idx in refined:
                 continue

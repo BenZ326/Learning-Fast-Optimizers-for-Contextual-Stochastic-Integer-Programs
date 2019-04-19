@@ -2,12 +2,12 @@ import numpy as np
 import environment
 
 
-class state:
+class State:
     """
     A representation of the state for the local move policy
     """
 
-    def __init__(self, args, solution, obj_value, context):
+    def __init__(self, args, solution, obj_value, context, latest_scenario_solution_and_slack):
         """
         Intialize state
 
@@ -23,8 +23,7 @@ class state:
         context : list
             Context vector containing the description of an instance
         """
-        self._solution = solution
-        self._obj_value = obj_value
+        self.args = args
         self._context = context
 
         # Store the solutions to scenarios and their corresponding slack.
@@ -32,6 +31,8 @@ class state:
         # only one constraint. Hence, only one slack per scenario.
         self._scenario_solution_and_slack = np.zeros(
             args.window_size * (args.num_of_scenarios_in_state * (args.dim_problem + 1)))
+
+        self.update(solution, obj_value, latest_scenario_solution_and_slack)
 
     def update(self, solution, obj_value, latest_scenario_solution_and_slack):
         """
@@ -50,10 +51,10 @@ class state:
 
         # Extend the solutions for the last time windown and crop the solutions of the first
         # time window
-        self._scenario_solution_and_slack.extend(
-            latest_scenario_solution_and_slack)
-        self._scenario_solution_and_slack = self._scenario_solution_and_slack[args.num_of_scenarios_in_state * (
-            args.dim_problem + 1):]
+        self._scenario_solution_and_slack = np.append(self._scenario_solution_and_slack,
+                                                      latest_scenario_solution_and_slack, axis=0)
+        self._scenario_solution_and_slack = self._scenario_solution_and_slack[self.args.num_of_scenarios_in_state*(
+            self.args.dim_problem+1):]
 
     # Access private variable solution
     def get_solution(self):
@@ -82,4 +83,4 @@ class state:
         representation.extend(self.get_context())
         representation.extend(self.get_scenario_solution_and_slack())
 
-        return representation
+        return np.asarray(representation)
