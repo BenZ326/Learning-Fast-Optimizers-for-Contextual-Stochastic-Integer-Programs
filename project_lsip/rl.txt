@@ -1,7 +1,0 @@
-TODOs:
-
-SCIP ENV
-- Create inst
-- Create scenarios
-- Solve scenarios using scip and return solutions and the rewards for each of the scenario.
-

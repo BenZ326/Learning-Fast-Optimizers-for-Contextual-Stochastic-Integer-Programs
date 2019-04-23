@@ -15,8 +15,6 @@ from IP_Eventhdlr import IP_Eventhdlr
 #######################################################################
 
 
-
-
 "An abstract class"
 
 
@@ -101,13 +99,15 @@ class KS_MIP(MIPModel):
         slack = self.model.addVar(vtype="C", name="slack")
         # Add constraints
         self.model.addCons(
-            quicksum(self.weight[j] * (self.x_star[j] - y[j]) for j in range(len(self.weight))) <= self.capacity,
+            quicksum(self.weight[j] * (self.x_star[j] - y[j])
+                     for j in range(len(self.weight))) <= self.capacity,
             name="capacity constraint")
         for j in range(len(self.value)):
             self.model.addCons(y[j] <= self.x_star[j])
         # impose ax[i] = max (y-x,0) api does not support min, max function
         self.model.setObjective(
-            quicksum(-1 * self.value[j] * y[j] + y[j] * (-1 * self.penalty) for j in range(len(self.value))),
+            quicksum(-1 * self.value[j] * y[j] + y[j] * (-1 * self.penalty)
+                     for j in range(len(self.value))),
             "maximize")
         self.model.data = y, slack
         self.model.hideOutput()  # silent the output
@@ -120,7 +120,8 @@ class KS_MIP(MIPModel):
         Y = np.zeros(len(self.weight))
         for i in range(len(self.weight)):
             Y[i] = self.model.getVal(y[i])
-        self.solution, self.slack, self.opt_obj = Y, self.model.getVal(slack), self.model.getObjVal()
+        self.solution, self.slack, self.opt_obj = Y, self.model.getVal(
+            slack), self.model.getObjVal()
 
         return status
 

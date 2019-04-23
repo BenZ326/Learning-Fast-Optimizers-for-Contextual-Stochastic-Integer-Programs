@@ -3,16 +3,17 @@ import torch as T
 from torch.distributions.categorical import Categorical
 import numpy as np
 
+import os
+
 
 class A2CLocalMovePolicy:
     """
     A local move policy based on A2C
     """
 
-    def __init__(self, args, initial_state=None, num_epochs=1000, num_local_move=2, gamma=0.99, beta_entropy=0.0001, lr_a2c=1e-4):
+    def __init__(self, args, initial_state=None, num_local_move=100, gamma=0.99, beta_entropy=0.0001, lr_a2c=1e-4):
         self.initial_state = initial_state
         # Hyperparams
-        self.num_epochs = num_epochs
         self.num_local_move = num_local_move
         self.gamma = gamma
         self.beta_entropy = beta_entropy
@@ -26,7 +27,7 @@ class A2CLocalMovePolicy:
         self.state_buffer = list()
         self.action_buffer = list()
         self.state_value_buffer = list()
-        self.action_prob_buffer = list()
+        self.selected_action_prob_buffer = list()
         self.action_probs_buffer = list()
 
     def _select_action_and_record_state_value(self, state):
@@ -36,9 +37,15 @@ class A2CLocalMovePolicy:
         probability distribution over the actions. Sample some action from
         this distribution and return
 
-        Arguments:
-        ----------
-            state (numpy array) : A vector representing the current state
+        Arguments
+        ---------
+        state : numpy array
+            A vector representing the current state
+
+        Returns
+        -------
+        action : int
+            Selected action
         """
         state_representation = T.from_numpy(
             state.get_representation()).float()
@@ -49,15 +56,22 @@ class A2CLocalMovePolicy:
         self.action_probs_buffer.append(action_probs)
 
         action = Categorical(probs=action_probs).sample()
-        self.action_prob_buffer.append(action_probs[action.item()])
+        self.selected_action_prob_buffer.append(action_probs[action.item()])
 
         return action.item()
 
     def _optimize_model(self):
+        """
+        Update the parameters of the Actor-Critic Network
+
+        Returns
+        -------
+        total_loss : float
+            Total loss incured by the local move policy per epoch
+        """
+        # Calculate return of each state
         returns = list()
         returns.append(self.reward_buffer[-1])
-
-        # Calculate return of each state
         self.reward_buffer.reverse()
         for idx in range(1, len(self.reward_buffer)):
             returns.append(self.reward_buffer[idx] +
@@ -71,7 +85,7 @@ class A2CLocalMovePolicy:
         advantage = returns - state_value_buffer
 
         # Calculate log prob of actions
-        action_prob_episode = T.stack(self.action_prob_buffer)
+        action_prob_episode = T.stack(self.selected_action_prob_buffer)
         log_action_prob_episode = T.log(action_prob_episode)
 
         # Calculate entropy
@@ -90,9 +104,49 @@ class A2CLocalMovePolicy:
         total_loss.backward()
         self.optimizer.step()
 
+        return total_loss
+
+    def perform_local_moves_in_eval_mode(self, env, start_state):
+        """
+        Evaluates the performance of trained local move policy. Freeze the
+        self.a2c network and improve the solution from the start_state.
+
+        Arguments
+        ---------
+        start_state : Object <class State>
+            Initial state for the local move policy
+
+        Return
+        ------
+        solution : ndarray
+            Improved solution after local moves
+        """
+
+        self.a2c.eval()
+        state = start_state
+
+        for i in range(self.num_local_move):
+            state_representation = T.from_numpy(
+                state.get_representation()).float()
+
+            action_probs, _ = self.a2c.get_action_probs_and_state_value(
+                state_representation)
+
+            action = Categorical(probs=action_probs).sample()
+
+            next_state, _ = env.step(
+                state=state, position=action, flip=True)
+
+            state = next_state
+
+        return state.get_solution()
+
+    def save_model(self, prefix):
+        T.save(self.a2c.state_dict(), os.path.join(
+            prefix, "local_move_policy.pt"))
+
     def train(self, start_state, env):
         state = start_state
-        self.total_reward = 0
         self._reset_buffers()
 
         # env.set_initial_state(self.initial_state)
@@ -109,4 +163,6 @@ class A2CLocalMovePolicy:
 
             state = next_state
 
-        self._optimize_model()
+        total_loss = self._optimize_model()
+
+        return self.reward_buffer, total_loss.item()

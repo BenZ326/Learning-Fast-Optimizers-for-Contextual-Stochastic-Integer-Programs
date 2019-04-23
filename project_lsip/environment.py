@@ -110,7 +110,7 @@ class EnvKnapsack(Environment):
             state = State(self.args, solution, obj_value,
                           self.instance.get_context(), scenarios_for_state_definition)
 
-            return state, np.array([obj_value]).reshape(-1)
+            return state, np.array([obj_value]).reshape(-1)[0]
 
     def evaluate(self, sol, memory=False):
         """
