@@ -13,6 +13,7 @@ class ActorCriticNetwork(nn.Module):
         self.dim_hidden_2 = int(self.dim_state / 3)
         self.dim_action = args.dim_problem + 1
         self.dim_state_value = 1
+        self.softmax = nn.Softmax()
 
         self._initialize_network()
 
@@ -27,5 +28,6 @@ class ActorCriticNetwork(nn.Module):
         x = F.relu(self.linear_2(x))
 
         state_value = self.linear_3(x)
-        action_probs = T.sigmoid(self.linear_4(x))
+        action_probs = self.softmax(self.linear_4(x))
+
         return action_probs, state_value

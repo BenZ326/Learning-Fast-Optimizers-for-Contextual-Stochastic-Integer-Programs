@@ -55,6 +55,7 @@ class A2CLocalMovePolicy:
         self.state_value_buffer.append(state_value.item())
         self.action_probs_buffer.append(action_probs)
 
+        print(action_probs, T.sum(action_probs))
         action = Categorical(probs=action_probs).sample()
         self.selected_action_prob_buffer.append(action_probs[action.item()])
 

@@ -183,7 +183,8 @@ def train_local_move_policy(args):
     generator = instance_generator(args.problem)
 
     # Initialise local move policy
-    local_move_policy = A2CLocalMovePolicy(args, gamma=0.1, num_local_move=50)
+    local_move_policy = A2CLocalMovePolicy(
+        args, gamma=0.1, beta_entropy=1e-3, num_local_move=50)
 
     # Train
     for epoch in range(1, args.init_epochs+1):
