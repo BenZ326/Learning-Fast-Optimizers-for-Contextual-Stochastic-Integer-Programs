@@ -114,9 +114,6 @@ class A2CLocalMovePolicy:
         # Optimize A2C model
         self.optimizer.zero_grad()
         total_loss.backward()
-        print("Parameters")
-        for param in self.a2c.named_parameters():
-            print(param[0], param[1].grad)
         self.optimizer.step()
 
         return total_loss
