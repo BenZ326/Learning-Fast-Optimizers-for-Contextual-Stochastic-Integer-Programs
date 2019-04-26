@@ -11,15 +11,26 @@ class A2CLocalMovePolicy:
     A local move policy based on A2C
     """
 
-    def __init__(self, args, initial_state=None, num_local_move=100, gamma=0.99, beta_entropy=0.0001, lr_a2c=1e-4):
+    def __init__(self, dim_context, dim_problem, window_size, num_of_scenarios_in_state,
+                 initial_state=None, num_local_move=100, gamma=0.99, beta_entropy=0.0001,
+                 lr_a2c=1e-4):
+        # Problem description
+        self.dim_context = dim_context
+        self.dim_problem = dim_problem
+        self.window_size = window_size
+        self.num_of_scenarios_in_state = num_of_scenarios_in_state
         self.initial_state = initial_state
         # Hyperparams
         self.num_local_move = num_local_move
         self.gamma = gamma
         self.beta_entropy = beta_entropy
         self.lr_a2c = lr_a2c
-
-        self.a2c = ActorCriticNetwork(args)
+        # A2C
+        self.a2c = ActorCriticNetwork(self.dim_context,
+                                      self.dim_problem,
+                                      self.window_size,
+                                      self.num_of_scenarios_in_state
+                                      )
         self.optimizer = T.optim.Adam(self.a2c.parameters(), lr=self.lr_a2c)
 
     def _reset_buffers(self):
@@ -52,10 +63,10 @@ class A2CLocalMovePolicy:
 
         action_probs, state_value = self.a2c.get_action_probs_and_state_value(
             state_representation)
-        self.state_value_buffer.append(state_value.item())
+        self.state_value_buffer.append(state_value)
         self.action_probs_buffer.append(action_probs)
 
-        print(action_probs, T.sum(action_probs))
+        # print(action_probs, T.sum(action_probs))
         action = Categorical(probs=action_probs).sample()
         self.selected_action_prob_buffer.append(action_probs[action.item()])
 
@@ -70,6 +81,7 @@ class A2CLocalMovePolicy:
         total_loss : float
             Total loss incured by the local move policy per epoch
         """
+        print("Inside optimize model")
         # Calculate return of each state
         returns = list()
         returns.append(self.reward_buffer[-1])
@@ -81,9 +93,8 @@ class A2CLocalMovePolicy:
 
         # Calculate advantage
         returns = T.from_numpy(np.asarray(returns)).float()
-        state_value_buffer = T.from_numpy(
-            np.asarray(self.state_value_buffer)).float()
-        advantage = returns - state_value_buffer
+        self.state_value_buffer = T.stack(self.state_value_buffer)
+        advantage = returns - self.state_value_buffer
 
         # Calculate log prob of actions
         action_prob_episode = T.stack(self.selected_action_prob_buffer)
@@ -95,14 +106,17 @@ class A2CLocalMovePolicy:
                    T.log(action_probs_episode)).sum(1).mean()
 
         # loss
-        action_loss = ((-log_action_prob_episode * advantage) +
-                       self.beta_entropy * entropy).mean()
+        action_loss = -(log_action_prob_episode * advantage.clone().detach() +
+                        self.beta_entropy * entropy).mean()
         value_loss = advantage.pow(2).mean()
         total_loss = action_loss + value_loss
 
         # Optimize A2C model
         self.optimizer.zero_grad()
         total_loss.backward()
+        print("Parameters")
+        for param in self.a2c.named_parameters():
+            print(param[0], param[1].grad)
         self.optimizer.step()
 
         return total_loss

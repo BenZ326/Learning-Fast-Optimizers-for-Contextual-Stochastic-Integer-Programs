@@ -46,7 +46,8 @@ class EnvKnapsack(Environment):
         self.TIME_LIMIT = TIME_LIMIT
 
     def extensive_form(self):
-        ex_model = extensive(self.instance, self.args.num_of_scenarios)
+        ex_model = extensive(
+            self.instance, self.args.num_of_scenarios_for_expectation)
         ex_model.solve(self.TIME_LIMIT)
         self._action_ex = ex_model.solution
         return ex_model.solution, ex_model.opt_obj, ex_model.gap, ex_model.best_sol_list
@@ -120,7 +121,7 @@ class EnvKnapsack(Environment):
         scenario_vec = []
         f_x = sol @ self.instance.get_values()
         f_y = 0  # the expected cost of second stage
-        for scenario in range(self.args.num_of_scenarios):
+        for scenario in range(self.args.num_of_scenarios_for_expectation):
             model = None
             while True:
                 weights = self.instance.sample_scenarios()
@@ -132,7 +133,7 @@ class EnvKnapsack(Environment):
                         tmp_vec.append(model.slack)
                         scenario_vec.append(tmp_vec)
                     break
-            f_y += model.query_opt_obj() / self.args.num_of_scenarios
+            f_y += model.query_opt_obj() / self.args.num_of_scenarios_for_expectation
         return f_x + f_y, scenario_vec
 
     def sample_scenarios_for_state_definition(self, scenarios_vec):

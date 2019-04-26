@@ -208,7 +208,7 @@ def save_stats_and_model(args, init_policy, reward, loss_init, ev_scip, ev_polic
         [args.init_model,
             "baseline="+str(args.use_baseline),
             "lr="+str(args.init_lr_rate),
-            "epochs="+str(args.init_epochs)])
+            "epochs="+str(args.epochs)])
 
     if not os.path.exists(os.path.join("stats", prefix)):
         os.mkdir(os.path.join("stats", prefix))
@@ -265,7 +265,7 @@ def save_local_move_policy_stats_and_model(args,
     prefix = "_".join(
         ["local_move_stats",
          "train_mode="+args.train_mode,
-         "epochs="+str(args.init_epochs),
+         "epochs="+str(args.epochs),
          "local_move="+str(local_move_policy.num_local_move),
          "gamma="+str(local_move_policy.gamma),
          "beta="+str(local_move_policy.beta_entropy),

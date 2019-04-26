@@ -30,20 +30,23 @@ LSTM = "LSTM"
 JOINT = "JOINT"
 INIT = "INIT"
 LOCAL = "LOCAL"
+GAMMA = 0.9
+BETA = 1e-3
+NUM_OF_LOCAL_MOVE = 50
+EPOCHS = 500
+PROBLEM = "ks"
+IS_PENALTY_SAME = True
+DIM_HIDDEN = 10
+DIM_PROBLEM = 25
+INIT_LR_RATE = 1e-4
+NUM_OF_SCENARIOS_FOR_EXPECTATION = 200
+USE_BASELINE = False
+WINDOW_SIZE = 5
+NUM_OF_SCENARIOS_IN_STATE = 40
+TRAIN_MODE = LOCAL
+LR_A2C = 1e-4
 
-DEFAULT = {}
-DEFAULT["EPOCHS"] = 500
-DEFAULT["PROBLEM"] = "ks"
-DEFAULT["IS_PENALTY_SAME"] = True
-DEFAULT["DIM_HIDDEN"] = 10
-DEFAULT["DIM_PROBLEM"] = 25
-DEFAULT["INIT_MODEL"] = NADE
-DEFAULT["INIT_LR_RATE"] = 1e-4
-DEFAULT["NUM_OF_SCENARIOS"] = 200
-DEFAULT["USE_BASELINE"] = False
-DEFAULT["WINDOW_SIZE"] = 5
-DEFAULT["NUM_OF_SCENARIOS_IN_STATE"] = 40
-DEFAULT["TRAIN_MODE"] = LOCAL
+INIT_MODEL = NADE
 
 
 def parse_args():
@@ -53,29 +56,37 @@ def parse_args():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--init_model", type=str,
-                        default=DEFAULT["INIT_MODEL"])
+                        default=INIT_MODEL)
     parser.add_argument("--init_lr_rate", type=float,
-                        default=DEFAULT["INIT_LR_RATE"])
-    parser.add_argument("--init_epochs", type=int, default=DEFAULT["EPOCHS"])
+                        default=INIT_LR_RATE)
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
     parser.add_argument("--use_baseline", type=bool,
-                        default=DEFAULT["USE_BASELINE"])
+                        default=USE_BASELINE)
     parser.add_argument('--is_penalty_same', type=bool,
-                        default=DEFAULT["IS_PENALTY_SAME"])
-    parser.add_argument("--num_of_scenarios", type=int,
-                        default=DEFAULT["NUM_OF_SCENARIOS"])
-    parser.add_argument("--problem", type=str, default=DEFAULT["PROBLEM"])
+                        default=IS_PENALTY_SAME)
+    parser.add_argument("--num_of_scenarios_for_expectation", type=int,
+                        default=NUM_OF_SCENARIOS_FOR_EXPECTATION)
+    parser.add_argument("--problem", type=str, default=PROBLEM)
     parser.add_argument("--dim_hidden", type=int,
-                        default=DEFAULT["DIM_HIDDEN"])
+                        default=DIM_HIDDEN)
     parser.add_argument("--dim_problem", type=int,
-                        default=DEFAULT["DIM_PROBLEM"])
+                        default=DIM_PROBLEM)
     parser.add_argument("--window_size", type=int,
-                        default=DEFAULT["WINDOW_SIZE"])
+                        default=WINDOW_SIZE)
     parser.add_argument("--num_of_scenarios_in_state", type=int,
-                        default=DEFAULT["NUM_OF_SCENARIOS_IN_STATE"])
+                        default=NUM_OF_SCENARIOS_IN_STATE)
     parser.add_argument("--train_mode", type=str,
-                        default=DEFAULT["TRAIN_MODE"])
+                        default=TRAIN_MODE)
 
+    parser.add_argument("--gamma", type=float,
+                        default=GAMMA)
+    parser.add_argument("--beta", type=float,
+                        default=BETA)
+    parser.add_argument("--num_local_move", type=int,
+                        default=NUM_OF_LOCAL_MOVE)
+    parser.add_argument("--lr_a2c", type=float, default=LR_A2C)
     args = parser.parse_args()
+
     if args.is_penalty_same:
         # The dimension of the context will be 2 more than dimension of problem.
         # We can break down 2 as one representing the total items and the second
@@ -87,8 +98,9 @@ def parse_args():
         # problem by two and add 1 to representing the total items.
         args.dim_context = 2*args.dim_problem + 1
     # Modify the hidden size based on the problem size, if not provided explicitly
-    if args.dim_hidden == DEFAULT["DIM_HIDDEN"]:
+    if args.dim_hidden == DIM_HIDDEN:
         args.dim_hidden = int(args.dim_problem/3)
+
     return args
 
 
@@ -122,10 +134,12 @@ def train_joint(args):
         loss_base_fn = T.nn.MSELoss()
 
     # Initialise local move policy
-    local_move_policy = A2CLocalMovePolicy(args)
+    local_move_policy = A2CLocalMovePolicy(args.dim_context, args.dim_problem, args.window_size,
+                                           args.num_of_scenarios_in_state, gamma=args.gamma,
+                                           beta_entropy=args.beta, num_local_move=args.num_local_move)
 
     # Train
-    for epoch in range(1, args.init_epochs+1):
+    for epoch in range(1, args.epochs+1):
         print("******************************************************")
         print(f"Epoch : {epoch}")
         # Generate instance and environment
@@ -183,11 +197,13 @@ def train_local_move_policy(args):
     generator = instance_generator(args.problem)
 
     # Initialise local move policy
-    local_move_policy = A2CLocalMovePolicy(
-        args, gamma=0.1, beta_entropy=1e-3, num_local_move=50)
+    local_move_policy = A2CLocalMovePolicy(args.dim_context, args.dim_problem, args.window_size,
+                                           args.num_of_scenarios_in_state, gamma=args.gamma,
+                                           beta_entropy=args.beta, num_local_move=args.num_local_move,
+                                           lr_a2c=args.lr_a2c)
 
     # Train
-    for epoch in range(1, args.init_epochs+1):
+    for epoch in range(1, args.epochs+1):
         start_time = time.time()
         print("******************************************************")
         print(f"Epoch : {epoch}")
@@ -222,7 +238,7 @@ def train_local_move_policy(args):
                                                    mean_relative_distance_per_epoch)
 
         print(
-            f"Took {time.time() - start_time} in epoch {epoch}/{args.init_epochs}")
+            f"Took {time.time() - start_time} in epoch {epoch}/{args.epochs}")
 
 
 if __name__ == "__main__":
