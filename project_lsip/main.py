@@ -7,9 +7,7 @@ import numpy as np
 import torch as T
 from torch.distributions.bernoulli import Bernoulli
 
-from initialisation_policy import (Baseline, LSTMInitialisationPolicy,
-                                   NADEInitializationPolicy,
-                                   NNInitialisationPolicy)
+from initialisation_policy import Baseline
 from instance import instance_generator
 from local_move_policy import A2CLocalMovePolicy
 
@@ -19,7 +17,7 @@ from utils import update_baseline_model
 from utils import generate_dummy_start_state
 from utils import evaluate_model
 from utils import save_stats_and_model
-from utils import save_local_move_policy_stats_and_model
+
 
 ##################################################################
 #                       DEFAULT PARAMETERS                       #
@@ -116,8 +114,12 @@ def train_joint(args):
 
     """
     # Buffers to store statistics
-    reward = list()
-    loss_init = list()
+    reward_init_buffer = list()
+    loss_init_buffer = list()
+
+    rewards_local_buffer = list()
+    loss_local_buffer = list()
+
     mean_square_error_per_epoch = list()
     mean_relative_distance_per_epoch = list()
 
@@ -152,6 +154,92 @@ def train_joint(args):
         # If using baseline, update the baseline net
         if args.use_baseline:
             baseline_reward = baseline_net.forward(context)
+            reward_init, loss_init, start_state = init_policy.REINFORCE(
+                init_opt, env, context, baseline_reward, True)
+            update_baseline_model(
+                loss_base_fn, baseline_reward, reward_init, opt_base)
+        # Without using baseline
+        else:
+            reward_init, loss_init, start_state = init_policy.REINFORCE(
+                init_opt, env, context)
+        reward_init_buffer.append(reward_init)
+        loss_init_buffer.append(loss_init)
+
+        # Learn using A2C
+        rewards_local, loss_local = local_move_policy.train(start_state, env)
+        rewards_local_buffer.append(rewards_local)
+        loss_local_buffer.append(loss_local)
+
+        # Save stats and model
+        if epoch % 100 == 0:
+            eval_stats = evaluate_model(
+                args, env, generator, init_policy=init_policy, local_move_policy=local_move_policy)
+
+            mean_square_error_per_epoch.append(eval_stats["mean_square_error"])
+            mean_relative_distance_per_epoch.append(
+                eval_stats["mean_relative_distance"])
+
+            # Save init policy stats
+            save_stats_and_model(args,
+                                 epoch,
+                                 reward_init_buffer,
+                                 loss_init_buffer,
+                                 mean_square_error_per_epoch,
+                                 mean_relative_distance_per_epoch,
+                                 init_policy,
+                                 INIT)
+
+            # Save local move policy stats
+            save_stats_and_model(args,
+                                 epoch,
+                                 rewards_local_buffer,
+                                 loss_local_buffer,
+                                 mean_square_error_per_epoch,
+                                 mean_relative_distance_per_epoch,
+                                 local_move_policy,
+                                 LOCAL)
+
+
+def train_init_policy(args):
+    """
+    Train the Intialisation Policy
+
+    Arguments
+    ---------
+    args : dict
+        Dictionary containing command line arguments
+    """
+    rewards_per_epoch = list()
+    loss_per_epoch = list()
+    mean_square_error_per_epoch = list()
+    mean_relative_distance_per_epoch = list()
+
+    generator = instance_generator(args.problem)
+
+    # Initialise Initialisation policy and set its optimizer
+    init_policy = select_initialization_policy(args)
+    init_opt = T.optim.Adam(init_policy.parameters(), lr=args.init_lr_rate)
+
+    # Initialize Baseline if required
+    if args.use_baseline:
+        baseline_net = Baseline(args.dim_context, args.dim_hidden)
+        opt_base = T.optim.Adam(baseline_net.parameters(), lr=1e-4)
+        loss_base_fn = T.nn.MSELoss()
+
+    # Train
+    for epoch in range(1, args.epochs+1):
+        print("******************************************************")
+        print(f"Epoch : {epoch}")
+        # Generate instance and environment
+        instance = generator.generate_instance()
+        context = instance.get_context()
+
+        env = create_environment(args, instance)
+
+        # Learn using REINFORCE
+        # If using baseline, update the baseline net
+        if args.use_baseline:
+            baseline_reward = baseline_net.forward(context)
             reward_, loss_init_, start_state = init_policy.REINFORCE(
                 init_opt, env, context, baseline_reward, True)
             update_baseline_model(
@@ -161,10 +249,8 @@ def train_joint(args):
             reward_, loss_init_, start_state = init_policy.REINFORCE(
                 init_opt, env, context)
 
-        local_move_policy.train(start_state, env)
-
-        reward.append(reward_.item())
-        loss_init.append(loss_init_.item())
+        rewards_per_epoch.append(reward_.item())
+        loss_per_epoch.append(loss_init_.item())
 
         # Save stats and model
         if epoch % 50 == 0:
@@ -175,8 +261,15 @@ def train_joint(args):
             mean_relative_distance_per_epoch.append(
                 eval_stats["mean_relative_distance"])
 
-            save_stats_and_model(args, init_policy, reward, loss_init, ev_scip, ev_policy,
-                                 ev_gap, ev_random, eval_sqdist, eval_rp, eval_nbr)
+            # Save init policy stats
+            save_stats_and_model(args,
+                                 epoch,
+                                 rewards_per_epoch,
+                                 loss_per_epoch,
+                                 mean_square_error_per_epoch,
+                                 mean_relative_distance_per_epoch,
+                                 init_policy,
+                                 INIT)
 
 
 def train_local_move_policy(args):
@@ -229,13 +322,14 @@ def train_local_move_policy(args):
             mean_relative_distance_per_epoch.append(
                 eval_stats["mean_relative_distance"])
 
-            save_local_move_policy_stats_and_model(args,
-                                                   local_move_policy,
-                                                   epoch,
-                                                   rewards_per_epoch,
-                                                   loss_per_epoch,
-                                                   mean_square_error_per_epoch,
-                                                   mean_relative_distance_per_epoch)
+            save_stats_and_model(args,
+                                 epoch,
+                                 rewards_per_epoch,
+                                 loss_per_epoch,
+                                 mean_square_error_per_epoch,
+                                 mean_relative_distance_per_epoch,
+                                 local_move_policy,
+                                 LOCAL)
 
         print(
             f"Took {time.time() - start_time} in epoch {epoch}/{args.epochs}")
@@ -246,6 +340,6 @@ if __name__ == "__main__":
     if args.train_mode == JOINT:
         train_joint(args)
     elif args.train_mode == INIT:
-        print("Independent training of init policy not yet defined.")
+        train_init_policy(args)
     elif args.train_mode == LOCAL:
         train_local_move_policy(args)

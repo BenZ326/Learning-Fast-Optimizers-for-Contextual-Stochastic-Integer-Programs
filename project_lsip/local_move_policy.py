@@ -166,9 +166,8 @@ class A2CLocalMovePolicy:
             action = self._select_action_and_record_state_value(state)
             next_state, reward = env.step(
                 state=state, position=action, flip=True)
-
             print(
-                f"Local move iteration {local_move_step}, reward obtained {reward.item()}")
+                f"Local move iteration {local_move_step}, reward obtained {reward}")
             self.state_buffer.append(state)
             self.action_buffer.append(action)
             self.reward_buffer.append(reward)

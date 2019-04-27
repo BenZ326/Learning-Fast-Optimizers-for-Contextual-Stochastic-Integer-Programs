@@ -1,14 +1,20 @@
 import time
 import os
-
+import torch as T
 import numpy as np
 
 from environment import EnvKnapsack
 
-STR = {}
-STR["JOINT"] = "JOINT"
-STR["INIT"] = "INIT"
-STR["LOCAL"] = "LOCAL"
+from initialisation_policy import (LSTMInitialisationPolicy,
+                                   NADEInitializationPolicy,
+                                   NNInitialisationPolicy)
+
+JOINT = "JOINT"
+INIT = "INIT"
+LOCAL = "LOCAL"
+NADE = "NADE"
+LSTM = "LSTM"
+FFNN = "FFNN"
 
 
 def create_environment(args, instance):
@@ -48,15 +54,15 @@ def select_initialization_policy(args):
     init_policy : nn.module
         Object of Initialisation policy
     """
-    if args.init_model == STR["NADE"]:
+    if args.init_model == NADE:
         # Use NADE as initialisation policy
         init_policy = NADEInitializationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
-    elif args.init_model == STR["FFNN"]:
+    elif args.init_model == FFNN:
         # Use FFNN as initialisation policy
         init_policy = NNInitialisationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
-    elif args.init_model == STR["LSTM"]:
+    elif args.init_model == LSTM:
         # Use FFNN as initialisation policy
         init_policy = LSTMInitialisationPolicy(
             args.dim_problem, args.dim_context, args.dim_hidden)
@@ -111,7 +117,7 @@ def evaluate_model(args, env, generator, init_policy=None, local_move_policy=Non
     square_dist = 0
     relative_dist = 0
 
-    if args.train_mode == STR["INIT"]:
+    if args.train_mode == INIT:
         init_policy.eval()
 
     print("#######################################")
@@ -128,20 +134,24 @@ def evaluate_model(args, env, generator, init_policy=None, local_move_policy=Non
 
         # Solve using model
         start_time = time.time()
-        if args.train_mode == STR["LOCAL"]:
+        if args.train_mode == LOCAL:
             # Improve the solution using local move policy only
             start_state = generate_dummy_start_state(env, args.dim_problem)
             solution = local_move_policy.perform_local_moves_in_eval_mode(
                 env, start_state)
-        elif args.train_mode == STR["INIT"]:
+            # solution = solution.numpy()
+        elif args.train_mode == INIT:
             # Solve instance using initialisation policy only
             solution, _ = init_policy.forward(context)
-        elif args.train_mode == STR["JOINT"]:
+            solution = solution.numpy()
+        elif args.train_mode == JOINT:
             # Solve instance using initialisation policy only
             solution, _ = init_policy.forward(context)
-            state, _, _, _ = env.step(solution=solution)
+            solution = solution.numpy().reshape(-1)
+            state, _ = env.step(solution=solution)
             solution = local_move_policy.perform_local_moves_in_eval_mode(
                 env, state)
+            # solution = solution.numpy()
 
         # Get the reward corresponding to the improved solution
         _, reward_policy = env.step(solution=solution.reshape(-1))
@@ -170,73 +180,16 @@ def evaluate_model(args, env, generator, init_policy=None, local_move_policy=Non
     return stats
 
 
-def save_stats_and_model(args, init_policy, reward, loss_init, ev_scip, ev_policy,
-                         ev_gap, ev_random, eval_sqdist, eval_rp, eval_nbr):
+def save_stats_and_model(args,
+                         epoch,
+                         rewards,
+                         loss,
+                         mean_square_error,
+                         mean_relative_distance,
+                         model,
+                         model_type):
     """
-    Save statistics and model
-
-    Arguments
-    ---------
-    args : dict
-        Dictionary containing command line arguments
-    init_policy : nn.Module
-        Object of Initialisation policy
-    reward : list
-        a list that stores reward return by the initialization policy at each epoch
-    loss_init : list
-        a list that stores loss at each epoch
-    ev_scip : list
-        a list that stores the optimal objective values returned by SCIP
-    ev_policy : list
-        a list that stores the values returned by the initialization policy
-    ev_gap : list
-        a list that stores MIP gap when SCIP is terminated
-    ev_random : list
-        a list that stores the values returned by random solutions
-    eval_sqdist : list
-        a list that stores square distance between scip solver's result and the policy's
-    eval_rp : list
-        a list that stores relative percentages
-    eval_nbr : list
-        a list that stores how many times the policy works better than SCIP
-    """
-
-    if not os.path.exists("stats"):
-        os.mkdir("stats")
-
-    prefix = "_".join(
-        [args.init_model,
-            "baseline="+str(args.use_baseline),
-            "lr="+str(args.init_lr_rate),
-            "epochs="+str(args.epochs)])
-
-    if not os.path.exists(os.path.join("stats", prefix)):
-        os.mkdir(os.path.join("stats", prefix))
-
-    np.save(os.path.join("stats", prefix, "reward.npy"), reward)
-    np.save(os.path.join("stats", prefix, "loss_init.npy"), loss_init)
-    np.save(os.path.join("stats", prefix, "ev_random.npy"), ev_random)
-    np.save(os.path.join("stats", prefix, "ev_scip.npy"), ev_scip)
-    np.save(os.path.join("stats", prefix, "ev_policy"), ev_policy)
-    np.save(os.path.join("stats", prefix, "env_gap"), env_gap)
-    np.save(os.path.join("stats", prefix,
-                         "eval_sqdist.npy"), eval_sqdist)
-    np.save(os.path.join("stats", prefix, "eval_rp.npy"), eval_rp)
-    np.save(os.path.join("stats", prefix, "eval_nbr.npy"), eval_nbr)
-
-    T.save(init_policy.state_dict(), os.path.join(
-        "stats", prefix, "init_policy"))
-
-
-def save_local_move_policy_stats_and_model(args,
-                                           local_move_policy,
-                                           epoch,
-                                           rewards,
-                                           loss,
-                                           mean_square_error,
-                                           mean_relative_distance):
-    """
-    Save the statistics of the local move policy
+    Save the statistics and model
 
     Arguments
     ---------
@@ -262,15 +215,25 @@ def save_local_move_policy_stats_and_model(args,
     if not os.path.exists("stats"):
         os.mkdir("stats")
 
-    prefix = "_".join(
-        ["local_move_stats",
-         "train_mode="+args.train_mode,
-         "epochs="+str(args.epochs),
-         "local_move="+str(local_move_policy.num_local_move),
-         "gamma="+str(local_move_policy.gamma),
-         "beta="+str(local_move_policy.beta_entropy),
-         "lr_a2c="+str(local_move_policy.lr_a2c)
-         ])
+    if model_type == INIT:
+        prefix = "_".join(
+            ["init_stats",
+             "train_mode="+args.train_mode,
+             "epochs="+str(args.epochs),
+             "baseline="+str(args.use_baseline),
+             "lr_init="+str(args.init_lr_rate)
+             ])
+
+    elif model_type == LOCAL:
+        prefix = "_".join(
+            ["local_move_stats",
+             "train_mode="+args.train_mode,
+             "epochs="+str(args.epochs),
+             "local_move="+str(args.num_local_move),
+             "gamma="+str(model.gamma),
+             "beta="+str(model.beta_entropy),
+             "lr_a2c="+str(model.lr_a2c)
+             ])
 
     if not os.path.exists(os.path.join("stats", prefix)):
         os.mkdir(os.path.join("stats", prefix))
@@ -282,4 +245,8 @@ def save_local_move_policy_stats_and_model(args,
     np.save(os.path.join("stats", prefix, "mrd.npy"),
             np.asarray(mean_relative_distance))
 
-    local_move_policy.save_model(os.path.join("stats", prefix))
+    if model_type == LOCAL:
+        model.save_model(os.path.join("stats", prefix))
+    else:
+        T.save(model.state_dict(), os.path.join(
+            "stats", prefix, "init_policy.pt"))
